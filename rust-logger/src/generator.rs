@@ -1,3 +1,0 @@
-mod log_generator{
-    
-}
