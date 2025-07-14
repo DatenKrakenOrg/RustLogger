@@ -49,7 +49,7 @@ fn main() {
         panic!("Path must end with .csv: {}", file_path.display());
     }
 
-    let mut index = 1;
+    let mut index = 0;
     while file_path.exists() {
         file_path.pop();
         index += 1;
@@ -58,6 +58,8 @@ fn main() {
 
     let mut file = File::create(file_path).expect("Could not create blank csv file!");
 
+    //Show dataframe for info
+    println!("{}", collected_df);
     CsvWriter::new(&mut file)
         .include_header(true)
         .with_separator(b',')
