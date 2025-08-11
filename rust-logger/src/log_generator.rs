@@ -1,6 +1,6 @@
 pub mod log_gen {
     use crate::logging_types::log_types::{Device, Level, Log, Message};
-    use chrono::{Duration, NaiveDate, NaiveDateTime};
+    use chrono::{Duration, NaiveDate, NaiveDateTime, SecondsFormat, TimeZone, Utc};
     use rand::prelude::*;
 
     /// Creates a log generator used as iterator to generate random chunks of datapoints.
@@ -49,7 +49,7 @@ pub mod log_gen {
             let mut rng = rand::rng();
             let days_in_range = (self.years.1 - self.years.0).num_days();
             let random_days: i64 = rng.random_range(0..days_in_range);
-            let timestamp: NaiveDateTime = (self.years.0 + Duration::days(random_days))
+            let naive: NaiveDateTime = (self.years.0 + Duration::days(random_days))
             .and_hms_opt(
                     rng.random_range(0..23),
                     rng.random_range(0..59),
@@ -57,6 +57,8 @@ pub mod log_gen {
                 )
                 .unwrap()
                 .into();
+            let timestamp: String = Utc.from_utc_datetime(&naive).to_rfc3339_opts(SecondsFormat::Millis, true);
+
 
             let temperature = rng.random_range(15.0..35.0);
             let humidity = rng.random_range(0.0..1.0);
