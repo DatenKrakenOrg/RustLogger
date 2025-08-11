@@ -1,28 +1,46 @@
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+mod serializable_objects;
+mod elastic;
+use actix_web::{post, web, App, HttpResponse, HttpServer, error::ErrorInternalServerError, Result as ActixResult};
+use elasticsearch::Elasticsearch;
+use serializable_objects::LogEntry;
+use elastic::{create_client, create_logs_index, send_document, INDEX_NAME};
+use dotenvy::dotenv;
+use anyhow::{Result, Context};
 
-#[get("/")]
-async fn hello() -> impl Responder {
-    HttpResponse::Ok().body("Hello world!")
+struct AppState{
+    client: Elasticsearch
 }
 
-#[post("/echo")]
-async fn echo(req_body: String) -> impl Responder {
-    HttpResponse::Ok().body(req_body)
-}
+#[post("/send_log")]
+async fn send_log(
+    data: web::Data<AppState>,
+    log_message: web::Json<LogEntry>,
+) -> ActixResult<HttpResponse> {
+    let return_val = send_document(&INDEX_NAME, &data.client, &log_message)
+        .await
+        .map_err(ErrorInternalServerError)?; // 500 on failure (pick another mapper if you want 4xx)
 
-async fn manual_hello() -> impl Responder {
-    HttpResponse::Ok().body("Hey there!")
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "result": return_val })))
 }
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
+async fn main() -> Result<()> {
+    dotenv().ok();
+    let client: Elasticsearch = create_client().context("Failed to create elasticsearch client")?;
+
+    create_logs_index(&INDEX_NAME, &client).await.context("Failed to call create_logs_index function")?;
+
+    let state = web::Data::new(AppState { client: client.clone() });
+
+    HttpServer::new(move || {
         App::new()
-            .service(hello)
-            .service(echo)
-            .route("/hey", web::get().to(manual_hello))
+            .app_data(state.clone())
+            .service(send_log)
     })
     .bind(("127.0.0.1", 8080))?
     .run()
-    .await
+    .await?;
+
+    Ok(())
 }
+

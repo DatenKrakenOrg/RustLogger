@@ -9,10 +9,10 @@ use url::Url;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let credentials = Credentials::Basic("elastic".into(), "secretPassword".into());
+    let credentials = Credentials::Basic("elastic".into(), "123456".into());
 
     let url = Url::parse("https://localhost:9200")?;
-    let conn_pool = SingleNodeConnectionPool::new(url);
+    let conn_pool = SingleNodeConnectionPool::new(url); // SingleNode -> Cluster
     let transport = TransportBuilder::new(conn_pool)
         .auth(credentials)
         .disable_proxy()
