@@ -5,6 +5,7 @@ use elasticsearch::Elasticsearch;
 use serializable_objects::LogEntry;
 use elastic::{create_client, create_logs_index, send_document, INDEX_NAME};
 use dotenvy::dotenv;
+use std::env;
 use anyhow::{Result, Context};
 
 struct AppState{
@@ -25,7 +26,9 @@ async fn send_log(
 
 #[actix_web::main]
 async fn main() -> Result<()> {
-    dotenv().ok();
+    if env::var("DEPLOYMENT").unwrap_or_default() != "PROD" {
+        dotenv().ok();
+    }
     let client: Elasticsearch = create_client().context("Failed to create elasticsearch client")?;
 
     create_logs_index(&INDEX_NAME, &client).await.context("Failed to call create_logs_index function")?;
