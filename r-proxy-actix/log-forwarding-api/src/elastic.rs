@@ -11,7 +11,7 @@ use std::env;
 use url::Url;
 
 /// Creates a elastic search client
-/// 
+///
 /// # Examples
 /// ```
 /// let client: Elasticsearch = create_client().context("Failed to create elasticsearch client")?;
@@ -37,7 +37,7 @@ pub fn create_client() -> Result<Elasticsearch> {
 }
 
 /// Creates an index in elastic search based on the cluster on the client passed
-/// 
+///
 /// # Examples:
 /// ```
 ///     let client: Elasticsearch = create_client().context("Failed to create elasticsearch client")?;
@@ -83,7 +83,6 @@ pub async fn create_logs_index(index_name: &str, connector: &Elasticsearch) -> R
 
     Ok(format!("Index '{}' created successfully", index_name))
 }
-
 
 /// Persists a document in elasticsearch based on a client and a index
 pub async fn send_document(

@@ -15,7 +15,7 @@ use uuid::Uuid;
 struct AppState {
     client: Elasticsearch,
     host_id: Uuid,
-    index_name: String
+    index_name: String,
 }
 
 /// Endpoint used to send logs towards the es cluster.
@@ -24,7 +24,7 @@ async fn send_log(
     data: web::Data<AppState>,
     log_message: web::Json<LogEntry>,
 ) -> ActixResult<HttpResponse> {
-    // Map_err needed since send_document doesnt return a actix error. 
+    // Map_err needed since send_document doesnt return a actix error.
     let return_val = send_document(&data.index_name, &data.client, &log_message)
         .await
         .map_err(ErrorInternalServerError)?;
@@ -52,17 +52,14 @@ async fn main() -> Result<()> {
     let index_name: String = env::var("INDEX_NAME").context("INDEX_NAME not set")?;
 
     // Creates a index if missing, otherwise returns
-    create_logs_index(
-        &index_name,
-        &client,
-    )
-    .await
-    .context("Failed to call create_logs_index function")?;
+    create_logs_index(&index_name, &client)
+        .await
+        .context("Failed to call create_logs_index function")?;
 
     let state = web::Data::new(AppState {
         client: client.clone(),
         host_id: Uuid::new_v4(),
-        index_name: index_name
+        index_name: index_name,
     });
 
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));

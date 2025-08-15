@@ -3,22 +3,6 @@
 version = 4
 
 [[package]]
-name = "actix-api"
-version = "1.0.0"
-dependencies = [
- "actix-web",
- "anyhow",
- "chrono",
- "dotenvy",
- "elasticsearch",
- "env_logger",
- "serde",
- "serde_json",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "actix-codec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1253,6 +1237,22 @@ name = "log"
 version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
+
+[[package]]
+name = "log-forwarding-api"
+version = "1.0.0"
+dependencies = [
+ "actix-web",
+ "anyhow",
+ "chrono",
+ "dotenvy",
+ "elasticsearch",
+ "env_logger",
+ "serde",
+ "serde_json",
+ "url",
+ "uuid",
+]
 
 [[package]]
 name = "memchr"
