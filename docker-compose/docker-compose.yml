@@ -21,7 +21,7 @@ services:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
     env_file:
-      - ../r-proxy-actix/log-forwarding-api/.env
+      - .env
     environment:
       - DEPLOYMENT=PROD
     restart: unless-stopped
@@ -44,7 +44,7 @@ services:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
     env_file:
-      - ../r-proxy-actix/log-forwarding-api/.env
+      - .env
     environment:
       - DEPLOYMENT=PROD
     restart: unless-stopped
@@ -67,7 +67,7 @@ services:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
     env_file:
-      - ../r-proxy-actix/log-forwarding-api/.env
+      - .env
     environment:
       - DEPLOYMENT=PROD
     restart: unless-stopped
