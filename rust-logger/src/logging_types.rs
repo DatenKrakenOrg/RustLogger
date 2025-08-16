@@ -1,5 +1,4 @@
 pub mod log_types {
-    use chrono::{NaiveDateTime};
     use serde::{Deserialize, Serialize};
     use std::fmt;
 
@@ -108,7 +107,7 @@ pub mod log_types {
     /// ´´´
     #[derive(Serialize, Deserialize)]
     pub struct Log {
-        pub timestamp: NaiveDateTime,
+        pub timestamp: String,
         pub level: Level,
         pub temperatur: f32,
         pub humidity: f32,
