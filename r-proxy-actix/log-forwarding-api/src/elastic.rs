@@ -1,14 +1,19 @@
 use crate::serializable_objects::LogEntry;
-use anyhow::{Context, Result};
+use anyhow::{Context, Ok, Result};
 use elasticsearch::{
     Elasticsearch, IndexParts,
     auth::Credentials,
-    http::transport::{SingleNodeConnectionPool, TransportBuilder},
+    http::transport::{
+        MultiNodeConnectionPool, SingleNodeConnectionPool, Transport, TransportBuilder,
+    },
     indices::{IndicesCreateParts, IndicesExistsParts},
 };
+use env_logger::builder;
 use serde_json::{Value, json};
 use std::env;
+use std::time::Duration;
 use url::Url;
+use std::result::Result::Ok as ResultOk;
 
 /// Creates a elastic search client
 ///
@@ -19,14 +24,19 @@ use url::Url;
 pub fn create_client() -> Result<Elasticsearch> {
     let username: String = env::var("ELASTIC_USERNAME").context("ELASTIC_USERNAME not set")?;
     let password: String = env::var("ELASTIC_PASSWORD").context("ELASTIC_PASSWORD not set")?;
-    let str_url: String = env::var("ELASTIC_URL").context("ELASTIC_URL not set")?;
+    let str_urls: String = env::var("ELASTIC_URL").context("ELASTIC_URL not set")?;
 
-    let url: Url = Url::parse(&format!("https://{}", str_url)).context("Invalid ES URL")?;
-    //TODO: Currently only one node in cluster is connected to -> Load Balancer?
-    let pool: SingleNodeConnectionPool = SingleNodeConnectionPool::new(url);
+    // Parse multiple URLs
+    let urls: Vec<Url> = str_urls
+        .split(',')
+        .map(|url| Url::parse(&format!("https://{}", url)).context("Invalid ES URL"))
+        .collect::<Result<Vec<_>>>()?;
 
-    //Since of a local project we disable cert and only use basic authentication
-    let transport = TransportBuilder::new(pool)
+    let duration = Duration::from_secs(10); // 10 seconds
+
+    let conn_pool = MultiNodeConnectionPool::round_robin(urls, Some(duration));
+
+    let transport = TransportBuilder::new(conn_pool)
         .auth(Credentials::Basic(username, password))
         .disable_proxy()
         .cert_validation(elasticsearch::cert::CertificateValidation::None)
@@ -105,6 +115,23 @@ pub async fn send_document(
         "Log entry inserted: {}",
         serde_json::to_string_pretty(log_entry)?
     ))
+}
+
+pub async fn get_nodes(client: &Elasticsearch) -> Result<String> {
+    let result = client
+        .nodes()
+        .info(elasticsearch::nodes::NodesInfoParts::None)
+        .send()
+        .await
+        .context("Node Info request failed");
+
+    match result {
+        ResultOk(r) => match r.text().await {
+            ResultOk(s) => Ok(s),
+            Err(e) => Err(anyhow::Error::msg("Node Info could not be retrieved")),
+        },
+        Err(e) => Err(anyhow::Error::msg("Node Info could not be retrieved")),
+    }
 }
 
 /// Creates a log mapping. This is needed in order to create a index in elastic search. It's format matches the logs.
