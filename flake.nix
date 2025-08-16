@@ -16,11 +16,13 @@
         packages = with pkgs;[
           python313
           pre-commit
-          python313Packages.elasticsearch
           rustc
           rustfmt
           cargo
           openssl
+          lazygit
+          pkg-config
+          rustup
         ];
 
         shellHook = ''

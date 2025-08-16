@@ -24,4 +24,5 @@ log_gen_output*.csv
 
 
 .env
+.direnv
 env-example.env
