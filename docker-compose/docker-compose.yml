@@ -155,12 +155,13 @@ services:
       elasticsetup:
         condition: service_healthy
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    container_name: es01
     env_file:
       - .env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata01:/usr/share/elasticsearch/data
-    # ports:
+    #ports:
     #   - ${ES_PORT}:9200
     environment:
       - node.name=es01
@@ -201,6 +202,7 @@ services:
     depends_on:
       - es01
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    container_name: es02
     env_file:
       - .env
     volumes:
@@ -245,6 +247,7 @@ services:
     depends_on:
       - es02
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    container_name: es03
     env_file:
       - .env
     volumes:
