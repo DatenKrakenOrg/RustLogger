@@ -1,11 +1,13 @@
 mod log_collector;
 mod log_generator;
 mod logging_types;
+mod utility;
 use clap::Parser;
 use log_collector::{memory_optimized_df_collector, runtime_optimized_df_collector};
 use log_generator::log_gen::LogGen;
 use polars::{frame::DataFrame, io::SerWriter, prelude::CsvWriter};
 use std::{fs::File, path::PathBuf};
+use utility::default_path;
 
 /// CLI Arguments to Parse via clap refer to documentation of clap for more information.
 #[derive(Parser)]
@@ -24,11 +26,7 @@ struct Args {
     #[arg(short, long, default_value_t = false)]
     memory_optimized: bool,
     /// Path to save csv to.
-    #[arg(short, long, default_value_t = std::path::Path::new(&std::env::current_dir().unwrap())
-    .join("log_gen_output.csv")
-    .to_str()
-    .unwrap()
-    .to_string())]
+    #[arg(short, long, default_value_t = default_path())]
     path: String,
 }
 

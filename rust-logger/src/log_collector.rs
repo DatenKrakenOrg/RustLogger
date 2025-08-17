@@ -18,7 +18,7 @@ pub fn runtime_optimized_df_collector(log_gen: LogGen) -> DataFrame {
     // Collect all rows in seperate dataframes at once in order to make use of the lazyframe optimizer
     for chunk in log_gen.collect::<Vec<Log>>().chunks(1000) {
         // Extract each datapoint for column-wise alignment
-        let timestamps: Vec<NaiveDateTime> = chunk.iter().map(|log| log.timestamp).collect();
+        let timestamps: Vec<&str> = chunk.iter().map(|log| log.timestamp.as_str()).collect();
         let levels: Vec<String> = chunk.iter().map(|log| log.level.to_string()).collect();
         let temperatures: Vec<f32> = chunk.iter().map(|log| log.temperatur).collect();
         let humidities: Vec<f32> = chunk.iter().map(|log| log.humidity).collect();
@@ -71,7 +71,7 @@ pub fn memory_optimized_df_collector(log_gen: LogGen) -> DataFrame {
     // Convert each chunk to lazyframe and concatenate them in each iteration => This does not collect all lazyframes before concat
     for chunk in log_gen.collect::<Vec<Log>>().chunks(1000) {
         // Extract each datapoint for column-wise alignment
-        let timestamps: Vec<NaiveDateTime> = chunk.iter().map(|log| log.timestamp).collect();
+        let timestamps: Vec<&str> = chunk.iter().map(|log| log.timestamp.as_str()).collect();
         let levels: Vec<String> = chunk.iter().map(|log| log.level.to_string()).collect();
         let temperatures: Vec<f32> = chunk.iter().map(|log| log.temperatur).collect();
         let humidities: Vec<f32> = chunk.iter().map(|log| log.humidity).collect();

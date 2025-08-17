@@ -1,0 +1,10 @@
+FROM rust:trixie AS builder
+WORKDIR /usr/src/log-forwarding-api
+COPY . .
+RUN cargo install --path .
+
+FROM debian:trixie-slim
+RUN apt-get update && apt-get install -y curl \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /usr/local/cargo/bin/log-forwarding-api /usr/local/bin/log-forwarding-api
+CMD ["log-forwarding-api"]
