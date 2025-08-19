@@ -67,7 +67,7 @@ async fn main() {
 }
 
 async fn process_file(config: &Config) {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().build()?;
     // File hosts.txt must exist in the current path
     let mut lines = read_lines(&config.logfile_path).unwrap();
     lines.next();

@@ -9,6 +9,7 @@ services:
     build:
       context: ../r-proxy-actix/nginx
       dockerfile: Dockerfile
+    container_name: log-forwarding-lb
     ports:
       - 8080:80
     networks:
