@@ -1,39 +1,81 @@
 use dotenv::dotenv;
 use reqwest;
-use std::collections::HashMap;
-use std::env;
+use reqwest::Error;
+use serde::Serialize;
+use serde_json;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
+use std::{env, f64};
+
+struct Config {
+    endless: bool,
+    repetitions: i32,
+    logfile_path: String,
+    endpoint: String,
+}
+
+impl Config {
+    fn load() -> Result<Self, String> {
+        dotenv().ok(); // Load .env file
+        Ok(Self {
+            endless: env::var("ENDLESS")
+                .map_err(|_| "ENDLESS environment variable is missing")?
+                .parse()
+                .map_err(|_| "ENDLESS must be a boolean")?,
+            repetitions: env::var("REPETITIONS")
+                .map_err(|_| "REPETITIONS environment variable is missing")?
+                .parse()
+                .map_err(|_| "REPETITIONS must be an integer")?,
+            logfile_path: env::var("LOGFILE_PATH")
+                .map_err(|_| "LOGFILE_PATH environment variable is missing")?,
+            endpoint: env::var("ENDPOINT")
+                .map_err(|_| "ENDPOINT environment variable is missing")?,
+        })
+    }
+}
+
+#[derive(Serialize)]
+struct InnerMsg {
+    device: String,
+    msg: String,
+    exceeded_values: Vec<bool>,
+}
+
+#[derive(Serialize)]
+struct LogEntry {
+    timestamp: String, // Use String if the timestamp is coming as a string from `data.next()`
+    level: String,
+    temperature: f64,
+    humidity: f64,
+    msg: InnerMsg,
+}
+
 #[tokio::main]
 async fn main() {
-    dotenv().ok();
-    let endless: bool = env::var("ENDLESS")
-        .unwrap()
-        .parse()
-        .expect("Failed to load endless");
-    let repetitions: i32 = env::var("REPETITIONS")
-        .unwrap()
-        .parse()
-        .expect("Failed to load repetitions");
-    if endless {
+    let config = Config::load().expect("Failed to load environment variables");
+
+    if config.endless {
         loop {
-            process_file().await;
+            process_file(&config).await;
         }
     } else {
-        for _n in 0..repetitions {
-            process_file().await;
+        for _n in 0..config.repetitions {
+            process_file(&config).await;
         }
     }
 }
 
-async fn process_file() {
+async fn process_file(config: &Config) {
     let client = reqwest::Client::new();
     // File hosts.txt must exist in the current path
-    let lines = read_lines(env::var("LOGFILE_PATH").unwrap()).unwrap();
-    // Consumes the iterator, returns an (Optional) Strin
+    let mut lines = read_lines(&config.logfile_path).unwrap();
+    lines.next();
+    // Consumes the iterator, returns an (Optional) String
     for line in lines.map_while(Result::ok) {
-        send_value(&client, line).await
+        send_value(&client, &config.endpoint, line)
+            .await
+            .expect("blöd gelaufen")
     }
 }
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
@@ -43,45 +85,75 @@ where
     let file = File::open(filename)?;
     Ok(io::BufReader::new(file).lines())
 }
-async fn send_value(client: &reqwest::Client, line: String) {
+async fn send_value(client: &reqwest::Client, endpoint: &str, line: String) -> Result<(), Error> {
     let mut data = line.split(",");
 
-    let mut request_body = HashMap::new();
-    request_body.insert("timestamp", data.next().unwrap());
-    request_body.insert("level", data.next().unwrap());
-    request_body.insert("humidity", data.next().unwrap());
-    request_body.insert("temperature", data.next().unwrap());
-    request_body.insert("", data.next().unwrap());
-    let message_parts: Vec<&str> = data.collect();
-    let message = get_message(&message_parts);
-    request_body.insert("msg", message.as_str());
+    println!("{}", line);
 
-    let res = client
-        .post(env::var("ENDPOINT").unwrap())
-        .json(&request_body)
-        .send()
-        .await;
-    match res {
-        Ok(response) => println!("sending suceeeded with code {}", response.status()),
-        Err(error) => println!("{}", error.to_string()),
+    let log_entry = create_log_entry(&mut data);
+
+    let res = client.post(endpoint).json(&log_entry).send().await?;
+
+    println!("{}", res.status());
+
+    match res.error_for_status() {
+        Ok(_) => (),
+        Err(err) => {
+            println!("{}", err.to_string());
+        }
+    }
+
+    //match res {
+    //    Ok(response) => println!("sending succeeded with code {}", response.status()),
+    //    Err(error) => println!("{}", error.to_string()),
+    //}
+    //
+    Ok(())
+}
+
+fn create_log_entry<'a>(data: &mut impl Iterator<Item = &'a str>) -> LogEntry {
+    let timestamp = data.next().unwrap().to_string();
+    let level = data.next().unwrap().to_string();
+    let humidity: f64 = data
+        .next()
+        .unwrap()
+        .parse()
+        .expect("Failed to parse humidity");
+    let temperature: f64 = data
+        .next()
+        .unwrap()
+        .parse()
+        .expect("Failed to parse temperature");
+    let message_parts: Vec<&str> = data.collect();
+    let msg: InnerMsg = get_message(&message_parts);
+
+    LogEntry {
+        timestamp,
+        level,
+        temperature,
+        humidity,
+        msg,
     }
 }
 
-fn get_message(data_collection: &[&str]) -> String {
-    let mut data = data_collection.into_iter();
-    let mut message = String::from("");
-    let mut option = data.next();
-    while !option.is_none() {
-        message.push_str(option.unwrap());
-        message.push(',');
-        option = data.next();
+fn get_message(data_collection: &[&str]) -> InnerMsg {
+    let mut data = data_collection.iter();
+
+    // Extract the device name
+    let device = data.next().unwrap_or(&"Unknown").to_string();
+
+    // Extract the message
+    let msg = data.next().unwrap_or(&"No message").to_string();
+
+    // Extract exceeded values as booleans
+    let exceeded_values: Vec<bool> = data
+        .map(|&part| part.parse::<bool>().unwrap_or(false)) // Parse remaining parts as booleans
+        .collect();
+
+    // Create and return the InnerMsg instance
+    InnerMsg {
+        device,
+        msg,
+        exceeded_values,
     }
-    message.pop();
-    message.pop();
-    let mut chars = message.chars();
-    chars.next();
-    message = chars.as_str().to_owned();
-    message = message.replace("\"\"", "\"");
-    //println!("{}",message);
-    message
 }

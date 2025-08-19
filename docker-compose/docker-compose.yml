@@ -1,3 +1,7 @@
+networks:
+  logger-network:
+    driver: bridge
+
 services:
   # r-proxy-actix
 
@@ -7,6 +11,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - 8080:80
+    networks:
+      - logger-network
     restart: unless-stopped
     depends_on:
       log-forwarding-api-1:
@@ -31,6 +37,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      - logger-network
     depends_on:
       es01:
         condition: service_healthy
@@ -48,12 +56,15 @@ services:
     environment:
       - DEPLOYMENT=PROD
     restart: unless-stopped
+    networks:
+      - logger-network
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/whoareyou"]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 10s
+
     depends_on:
       es01:
         condition: service_healthy
@@ -71,6 +82,8 @@ services:
     environment:
       - DEPLOYMENT=PROD
     restart: unless-stopped
+    networks:
+      - logger-network
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/whoareyou"]
       interval: 30s
@@ -89,6 +102,8 @@ services:
   # elastic-stack
   elasticsetup:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    networks:
+      - logger-network
     env_file:
       - .env
     volumes:
@@ -163,6 +178,8 @@ services:
       - esdata01:/usr/share/elasticsearch/data
     #ports:
     #   - ${ES_PORT}:9200
+    networks:
+      - logger-network
     environment:
       - node.name=es01
       - cluster.name=${CLUSTER_NAME}
@@ -208,6 +225,8 @@ services:
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata02:/usr/share/elasticsearch/data
+    networks:
+      - logger-network
     environment:
       - node.name=es02
       - cluster.name=${CLUSTER_NAME}
@@ -253,6 +272,8 @@ services:
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata03:/usr/share/elasticsearch/data
+    networks:
+      - logger-network
     environment:
       - node.name=es03
       - cluster.name=${CLUSTER_NAME}
@@ -297,6 +318,8 @@ services:
       es03:
         condition: service_healthy
     image: docker.elastic.co/kibana/kibana:8.19.0
+    networks:
+      - logger-network
     volumes:
       - certs:/usr/share/kibana/config/certs
       - kibanadata:/usr/share/kibana/data
@@ -318,24 +341,27 @@ services:
       interval: 10s
       timeout: 10s
       retries: 120
+
   log_gen:
     build:
-      context: ./rust-logger/
+      context: ../rust-logger/
       dockerfile: Dockerfile
     volumes: 
       - logs:/etc/logs
+    networks:
+      - logger-network
+
   log_sender:
     build:
-      context: ./log_sender/
+      context: ../log_sender/
       dockerfile: Dockerfile
     env_file: ../log_sender/.env
     depends_on:
       - log-forwarding-lb
-
     volumes:
       - logs:/etc/logs
-
-
+    networks:
+      - logger-network
 
 volumes:
   certs:
