@@ -34,7 +34,7 @@ RUN --mount=type=bind,source=src,target=src \
     --mount=type=cache,target=/usr/local/cargo/git/db \
     --mount=type=cache,target=/usr/local/cargo/registry/ \
 cargo build --locked --release && \
-cp ./target/release/$APP_NAME /bin/server
+cp ./target/release/$APP_NAME /bin/log_gen
 
 ################################################################################
 # Create a new stage for running the application that contains the minimal
@@ -48,24 +48,8 @@ cp ./target/release/$APP_NAME /bin/server
 # (e.g., alpine@sha256:664888ac9cfd28068e062c991ebcff4b4c7307dc8dd4df9e728bedde5c449d91).
 FROM alpine:3.18 AS final
 
-# Create a non-privileged user that the app will run under.
-# See https://docs.docker.com/go/dockerfile-user-best-practices/
-ARG UID=10001
-RUN adduser \
-    --disabled-password \
-    --gecos "" \
-    --home "/nonexistent" \
-    --shell "/sbin/nologin" \
-    --no-create-home \
-    --uid "${UID}" \
-    appuser
-USER appuser
-
 # Copy the executable from the "build" stage.
-COPY --from=build /bin/server /bin/
-
-# Expose the port that the application listens on.
-EXPOSE 1000
+COPY --from=build /bin/log_gen /bin/
 
 # What the container should run when it is started.
-CMD ["/bin/server" ,"-help"]
+CMD ["/bin/log_gen" ,"-p","/etc/logs/logs.csv"]

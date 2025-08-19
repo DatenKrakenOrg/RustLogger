@@ -318,6 +318,24 @@ services:
       interval: 10s
       timeout: 10s
       retries: 120
+  log_gen:
+    build:
+      context: ./rust-logger/
+      dockerfile: Dockerfile
+    volumes: 
+      - logs:/etc/logs
+  log_sender:
+    build:
+      context: ./log_sender/
+      dockerfile: Dockerfile
+    env_file: ../log_sender/.env
+    depends_on:
+      - log-forwarding-lb
+
+    volumes:
+      - logs:/etc/logs
+
+
 
 volumes:
   certs:
@@ -330,3 +348,4 @@ volumes:
     driver: local
   kibanadata:
     driver: local
+  logs:
