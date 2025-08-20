@@ -24,7 +24,6 @@ async fn send_log(
     data: web::Data<AppState>,
     log_message: web::Json<LogEntry>,
 ) -> ActixResult<HttpResponse> {
-    println!("Request received");
     // Map_err needed since send_document doesnt return a actix error.
     let return_val = send_document(&data.index_name, &data.client, &log_message)
         .await
