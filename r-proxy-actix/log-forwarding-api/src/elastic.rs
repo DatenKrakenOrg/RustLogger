@@ -137,6 +137,12 @@ pub async fn get_nodes(client: &Elasticsearch) -> Result<String> {
 /// Creates a log mapping. This is needed in order to create a index in elastic search. It's format matches the logs.
 fn create_log_mapping() -> Value {
     json!({
+        "settings": {
+            "index": {
+                "number_of_routing_shards": 3,
+                "number_of_replicas": 2
+            }
+        },
         "properties": {
             "timestamp": {
                 "type": "date",

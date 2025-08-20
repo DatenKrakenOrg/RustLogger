@@ -7,7 +7,7 @@ http.port: 9200
 transport.port: 9300
 
 # Discovery settings
-discovery.seed_hosts: ["es01", "es02"]
+discovery.seed_hosts: ["es01", "es02", "es04"]
 cluster.initial_master_nodes: ["es01"]
 
 # Security settings
