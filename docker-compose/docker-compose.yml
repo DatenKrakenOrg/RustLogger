@@ -47,7 +47,9 @@ services:
         condition: service_healthy
       es03:
         condition: service_healthy
-  
+      elasticsetup:
+        condition: service_completed_successfully
+
   log-forwarding-api-2:
     build:
       context: ../r-proxy-actix/log-forwarding-api
@@ -65,7 +67,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-
     depends_on:
       es01:
         condition: service_healthy
@@ -73,6 +74,8 @@ services:
         condition: service_healthy
       es03:
         condition: service_healthy
+      elasticsetup:
+        condition: service_completed_successfully
 
   log-forwarding-api-3:
     build:
@@ -98,6 +101,8 @@ services:
         condition: service_healthy
       es03:
         condition: service_healthy
+      elasticsetup:
+        condition: service_completed_successfully
   
 
   # elastic-stack
