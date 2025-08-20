@@ -8,7 +8,7 @@ transport.port: 9300
 
 # Discovery settings
 discovery.seed_hosts: ["es01", "es03"]
-cluster.initial_master_nodes: ["es01", "es02", "es03"]
+cluster.initial_master_nodes: ["es01"]
 
 # Security settings
 xpack.security.enabled: true
@@ -32,6 +32,14 @@ xpack.monitoring.collection.enabled: true
 
 # Memory settings
 bootstrap.memory_lock: false
+
+# Node specialization - Data Worker
+node.roles: ["data", "ingest", "remote_cluster_client"]
+node.attr.node_type: worker
+
+# Worker optimizations
+indices.memory.index_buffer_size: 20%
+thread_pool.write.queue_size: 1000
 
 # Logging
 logger.level: WARN

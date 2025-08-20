@@ -186,7 +186,6 @@ services:
       - logger-network
     environment:
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
-    mem_limit: ${MEM_LIMIT}
     ulimits:
       memlock:
         soft: -1
@@ -216,7 +215,6 @@ services:
       - logger-network
     environment:
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
-    mem_limit: ${MEM_LIMIT}
     ulimits:
       memlock:
         soft: -1
@@ -246,7 +244,6 @@ services:
       - logger-network
     environment:
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
-    mem_limit: ${MEM_LIMIT}
     ulimits:
       memlock:
         soft: -1
@@ -280,7 +277,6 @@ services:
       - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
     ports:
       - 5601:5601
-    mem_limit: ${MEM_LIMIT}
     healthcheck:
       test:
         [

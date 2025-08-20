@@ -23,6 +23,7 @@
           lazygit
           pkg-config
           rustup
+          dockerfmt
         ];
 
         shellHook = ''

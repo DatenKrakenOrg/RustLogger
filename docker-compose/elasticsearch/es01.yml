@@ -8,7 +8,7 @@ transport.port: 9300
 
 # Discovery settings
 discovery.seed_hosts: ["es02", "es03"]
-cluster.initial_master_nodes: ["es01", "es02", "es03"]
+cluster.initial_master_nodes: ["es01"]
 
 # Security settings
 xpack.security.enabled: true
@@ -32,6 +32,14 @@ xpack.monitoring.collection.enabled: true
 
 # Memory settings
 bootstrap.memory_lock: false
+
+# Node specialization - Master Coordinator
+node.roles: ["master", "ml", "remote_cluster_client"]
+node.attr.node_type: coordinator
+
+# Coordinator optimizations
+cluster.routing.allocation.node_concurrent_recoveries: 4
+cluster.routing.allocation.cluster_concurrent_rebalance: 2
 
 # Logging
 logger.level: WARN
