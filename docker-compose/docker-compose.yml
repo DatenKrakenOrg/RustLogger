@@ -28,9 +28,8 @@ services:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
     env_file:
-      - .env
-    environment:
-      - DEPLOYMENT=PROD
+      - env/api.env
+      - env/elasticsearch.env
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/whoareyou"]
@@ -55,9 +54,8 @@ services:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
     env_file:
-      - .env
-    environment:
-      - DEPLOYMENT=PROD
+      - env/api.env
+      - env/elasticsearch.env
     restart: unless-stopped
     networks:
       - logger-network
@@ -82,9 +80,8 @@ services:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
     env_file:
-      - .env
-    environment:
-      - DEPLOYMENT=PROD
+      - env/api.env
+      - env/elasticsearch.env
     restart: unless-stopped
     networks:
       - logger-network
@@ -111,7 +108,7 @@ services:
     networks:
       - logger-network
     env_file:
-      - .env
+      - env/elasticsearch.env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
     user: "0"
@@ -178,34 +175,17 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     container_name: es01
     env_file:
-      - .env
+      - env/elasticsearch.env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata01:/usr/share/elasticsearch/data
+      - ./elasticsearch/es01.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
     #ports:
     #   - ${ES_PORT}:9200
     networks:
       - logger-network
     environment:
-      - node.name=es01
-      - cluster.name=${CLUSTER_NAME}
-      - cluster.initial_master_nodes=es01,es02,es03
-      - discovery.seed_hosts=es02,es03
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
-      - bootstrap.memory_lock=true
-      - xpack.security.enabled=true
-      - xpack.security.http.ssl.enabled=true
-      - xpack.security.http.ssl.key=certs/es01/es01.key
-      - xpack.security.http.ssl.certificate=certs/es01/es01.crt
-      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
-      - xpack.security.transport.ssl.enabled=true
-      - xpack.security.transport.ssl.key=certs/es01/es01.key
-      - xpack.security.transport.ssl.certificate=certs/es01/es01.crt
-      - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
-      - xpack.security.transport.ssl.verification_mode=certificate
-      - xpack.license.self_generated.type=${LICENSE}
-      - xpack.ml.use_auto_machine_memory_percent=true
-      - bootstrap.memory_lock=false
     mem_limit: ${MEM_LIMIT}
     ulimits:
       memlock:
@@ -227,32 +207,15 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     container_name: es02
     env_file:
-      - .env
+      - env/elasticsearch.env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata02:/usr/share/elasticsearch/data
+      - ./elasticsearch/es02.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
     networks:
       - logger-network
     environment:
-      - node.name=es02
-      - cluster.name=${CLUSTER_NAME}
-      - cluster.initial_master_nodes=es01,es02,es03
-      - discovery.seed_hosts=es01,es03
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
-      - bootstrap.memory_lock=true
-      - xpack.security.enabled=true
-      - xpack.security.http.ssl.enabled=true
-      - xpack.security.http.ssl.key=certs/es02/es02.key
-      - xpack.security.http.ssl.certificate=certs/es02/es02.crt
-      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
-      - xpack.security.transport.ssl.enabled=true
-      - xpack.security.transport.ssl.key=certs/es02/es02.key
-      - xpack.security.transport.ssl.certificate=certs/es02/es02.crt
-      - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
-      - xpack.security.transport.ssl.verification_mode=certificate
-      - xpack.license.self_generated.type=${LICENSE}
-      - xpack.ml.use_auto_machine_memory_percent=true
-      - bootstrap.memory_lock=false
     mem_limit: ${MEM_LIMIT}
     ulimits:
       memlock:
@@ -274,32 +237,15 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     container_name: es03
     env_file:
-      - .env
+      - env/elasticsearch.env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata03:/usr/share/elasticsearch/data
+      - ./elasticsearch/es03.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
     networks:
       - logger-network
     environment:
-      - node.name=es03
-      - cluster.name=${CLUSTER_NAME}
-      - cluster.initial_master_nodes=es01,es02,es03
-      - discovery.seed_hosts=es01,es02
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
-      - bootstrap.memory_lock=true
-      - xpack.security.enabled=true
-      - xpack.security.http.ssl.enabled=true
-      - xpack.security.http.ssl.key=certs/es03/es03.key
-      - xpack.security.http.ssl.certificate=certs/es03/es03.crt
-      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
-      - xpack.security.transport.ssl.enabled=true
-      - xpack.security.transport.ssl.key=certs/es03/es03.key
-      - xpack.security.transport.ssl.certificate=certs/es03/es03.crt
-      - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
-      - xpack.security.transport.ssl.verification_mode=certificate
-      - xpack.license.self_generated.type=${LICENSE}
-      - xpack.ml.use_auto_machine_memory_percent=true
-      - bootstrap.memory_lock=false
     mem_limit: ${MEM_LIMIT}
     ulimits:
       memlock:
@@ -324,19 +270,16 @@ services:
       es03:
         condition: service_healthy
     image: docker.elastic.co/kibana/kibana:8.19.0
+    env_file:
+      - env/elasticsearch.env
     networks:
       - logger-network
     volumes:
       - certs:/usr/share/kibana/config/certs
       - kibanadata:/usr/share/kibana/data
+      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
     ports:
       - 5601:5601
-    environment:
-      - SERVERNAME=kibana
-      - ELASTICSEARCH_HOSTS=https://es01:9200
-      - ELASTICSEARCH_USERNAME=kibana_system
-      - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD}
-      - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=config/certs/ca/ca.crt
     mem_limit: ${MEM_LIMIT}
     healthcheck:
       test:
@@ -361,7 +304,8 @@ services:
     build:
       context: ../log_sender/
       dockerfile: Dockerfile
-    env_file: ../log_sender/.env
+    env_file:
+      - env/logging.env
     depends_on:
       - log-forwarding-lb
     volumes:

@@ -1,0 +1,37 @@
+cluster.name: ${CLUSTER_NAME}
+node.name: es01
+
+# Network settings
+network.host: 0.0.0.0
+http.port: 9200
+transport.port: 9300
+
+# Discovery settings
+discovery.seed_hosts: ["es02", "es03"]
+cluster.initial_master_nodes: ["es01", "es02", "es03"]
+
+# Security settings
+xpack.security.enabled: true
+xpack.security.http.ssl.enabled: true
+xpack.security.http.ssl.key: certs/es01/es01.key
+xpack.security.http.ssl.certificate: certs/es01/es01.crt
+xpack.security.http.ssl.certificate_authorities: certs/ca/ca.crt
+
+xpack.security.transport.ssl.enabled: true
+xpack.security.transport.ssl.key: certs/es01/es01.key
+xpack.security.transport.ssl.certificate: certs/es01/es01.crt
+xpack.security.transport.ssl.certificate_authorities: certs/ca/ca.crt
+xpack.security.transport.ssl.verification_mode: certificate
+
+# License settings
+xpack.license.self_generated.type: ${LICENSE}
+
+# Machine learning and monitoring
+xpack.ml.use_auto_machine_memory_percent: true
+xpack.monitoring.collection.enabled: true
+
+# Memory settings
+bootstrap.memory_lock: false
+
+# Logging
+logger.level: WARN
