@@ -35,7 +35,6 @@ async fn send_log(
 /// Endpoint that returns the container name OR if not available a uuid generated on startup within crate::main.
 #[get("/whoareyou")]
 async fn who_are_you(data: web::Data<AppState>) -> ActixResult<HttpResponse> {
-    println!("Fuck you");
     Ok(HttpResponse::Ok().json(serde_json::json!(
         {
             "instance_id": env::var("HOSTNAME").unwrap_or_else(|_| data.host_id.to_string())

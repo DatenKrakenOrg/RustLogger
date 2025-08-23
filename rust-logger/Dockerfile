@@ -6,6 +6,9 @@
 
 # Want to help us make this template better? Share your feedback here: https://forms.gle/ybq9Krt8jtBL3iCk7
 
+RUN adduser -D appuser
+USER appuser
+
 ARG RUST_VERSION=1.88.0
 ARG APP_NAME=rust-logger
 

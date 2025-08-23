@@ -64,6 +64,17 @@ pub fn create_client() -> Result<Elasticsearch> {
 pub async fn create_logs_index(index_name: &str, connector: &Elasticsearch) -> Result<String> {
     let mapping = create_log_mapping();
 
+    // Get index settings from environment variables with defaults
+    let replicas: u32 = env::var("ELASTIC_INDEX_REPLICAS")
+        .unwrap_or_else(|_| "1".to_string())
+        .parse()
+        .unwrap_or(1);
+    
+    let shards: u32 = env::var("ELASTIC_INDEX_SHARDS")
+        .unwrap_or_else(|_| "1".to_string())
+        .parse()
+        .unwrap_or(1);
+
     // Check if index exists
     let exists = connector
         .indices()
@@ -81,6 +92,10 @@ pub async fn create_logs_index(index_name: &str, connector: &Elasticsearch) -> R
         .indices()
         .create(IndicesCreateParts::Index(index_name))
         .body(json!({
+            "settings": {
+                "number_of_replicas": replicas,
+                "number_of_shards": shards
+            },
             "mappings": mapping
         }))
         .send()
@@ -137,12 +152,6 @@ pub async fn get_nodes(client: &Elasticsearch) -> Result<String> {
 /// Creates a log mapping. This is needed in order to create a index in elastic search. It's format matches the logs.
 fn create_log_mapping() -> Value {
     json!({
-        "settings": {
-            "index": {
-                "number_of_routing_shards": 3,
-                "number_of_replicas": 2
-            }
-        },
         "properties": {
             "timestamp": {
                 "type": "date",

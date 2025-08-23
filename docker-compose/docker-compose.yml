@@ -100,7 +100,6 @@ services:
         condition: service_healthy
       elasticsetup:
         condition: service_completed_successfully
-  
 
   # elastic-stack
   elasticsetup:
@@ -209,7 +208,8 @@ services:
 
   es02:
     depends_on:
-      - es01
+      elasticsetup:
+        condition: service_healthy
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     container_name: es02
     env_file:
@@ -239,7 +239,8 @@ services:
 
   es03:
     depends_on:
-      - es02
+      elasticsetup:
+        condition: service_healthy
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     container_name: es03
     env_file:
@@ -269,7 +270,8 @@ services:
 
   es04:
     depends_on:
-      - es03
+      elasticsetup:
+        condition: service_healthy
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     container_name: es04
     env_file:
