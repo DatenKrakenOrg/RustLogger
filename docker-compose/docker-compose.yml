@@ -3,8 +3,42 @@ networks:
     driver: bridge
 
 services:
-  # r-proxy-actix
+  haproxy:
+    image: haproxy:latest
+    container_name: haproxy
+    ports:
+      - "9200:9200" # Expose HAProxy for Elasticsearch
+      - "8404:8404" # Expose HAProxy stats page
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - certs:/usr/share/haproxy/certs
+    networks:
+      - logger-network
+    depends_on:
+      es01:
+        condition: service_healthy
+      es02:
+        condition: service_healthy
+      es03:
+        condition: service_healthy
+      es04:
+        condition: service_healthy
+    restart: unless-stopped
 
+  metricbeat:
+    image: docker.elastic.co/beats/metricbeat:8.19.0
+    container_name: metricbeat
+    env_file: env/elasticsearch.env
+    volumes:
+      - ./metricbeat/metricbeat.yml:/usr/share/metricbeat/metricbeat.yml:ro
+      - certs:/usr/share/metricbeat/certs
+    networks:
+      - logger-network
+    depends_on:
+      - haproxy
+    restart: unless-stopped
+
+  # r-proxy-actix
   log-forwarding-lb:
     build:
       context: ../r-proxy-actix/nginx
@@ -40,12 +74,8 @@ services:
     networks:
       - logger-network
     depends_on:
-      es01:
-        condition: service_healthy
-      es02:
-        condition: service_healthy
-      es03:
-        condition: service_healthy
+      haproxy:
+        condition: service_started
       elasticsetup:
         condition: service_completed_successfully
 
@@ -66,12 +96,8 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      es01:
-        condition: service_healthy
-      es02:
-        condition: service_healthy
-      es03:
-        condition: service_healthy
+      haproxy:
+        condition: service_started
       elasticsetup:
         condition: service_completed_successfully
 
@@ -92,12 +118,8 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      es01:
-        condition: service_healthy
-      es02:
-        condition: service_healthy
-      es03:
-        condition: service_healthy
+      haproxy:
+        condition: service_started
       elasticsetup:
         condition: service_completed_successfully
 
@@ -317,7 +339,7 @@ services:
       - kibanadata:/usr/share/kibana/data
       - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
     ports:
-      - 5601:5601
+       - 5601:5601
     healthcheck:
       test:
         [

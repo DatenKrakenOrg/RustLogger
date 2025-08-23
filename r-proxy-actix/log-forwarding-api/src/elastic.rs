@@ -4,14 +4,13 @@ use elasticsearch::{
     Elasticsearch, IndexParts,
     auth::Credentials,
     http::transport::{
-        MultiNodeConnectionPool, SingleNodeConnectionPool, Transport, TransportBuilder,
+        SingleNodeConnectionPool, TransportBuilder,
     },
     indices::{IndicesCreateParts, IndicesExistsParts},
 };
 use env_logger::builder;
 use serde_json::{Value, json};
 use std::env;
-use std::time::Duration;
 use url::Url;
 use std::result::Result::Ok as ResultOk;
 
@@ -24,19 +23,16 @@ use std::result::Result::Ok as ResultOk;
 pub fn create_client() -> Result<Elasticsearch> {
     let username: String = env::var("ELASTIC_USERNAME").context("ELASTIC_USERNAME not set")?;
     let password: String = env::var("ELASTIC_PASSWORD").context("ELASTIC_PASSWORD not set")?;
-    let str_urls: String = env::var("ELASTIC_URL").context("ELASTIC_URL not set")?;
+    let str_url: String = env::var("ELASTIC_URL").context("ELASTIC_URL not set")?;
 
-    // Parse multiple URLs
-    let urls: Vec<Url> = str_urls
-        .split(',')
-        .map(|url| Url::parse(&format!("https://{}", url)).context("Invalid ES URL"))
-        .collect::<Result<Vec<_>>>()?;
+    // Parse URL with proper scheme detection
+    let url: Url = Url::parse(&str_url).context("Invalid ES URL")?;
 
-    let duration = Duration::from_secs(10); // 10 seconds
 
-    let conn_pool = MultiNodeConnectionPool::round_robin(urls, Some(duration));
+    let pool: SingleNodeConnectionPool = SingleNodeConnectionPool::new(url);
 
-    let transport = TransportBuilder::new(conn_pool)
+    //Since of a local project we disable cert and only use basic authentication
+    let transport = TransportBuilder::new(pool)
         .auth(Credentials::Basic(username, password))
         .disable_proxy()
         .cert_validation(elasticsearch::cert::CertificateValidation::None)
@@ -143,9 +139,9 @@ pub async fn get_nodes(client: &Elasticsearch) -> Result<String> {
     match result {
         ResultOk(r) => match r.text().await {
             ResultOk(s) => Ok(s),
-            Err(e) => Err(anyhow::Error::msg("Node Info could not be retrieved")),
+            Err(_) => Err(anyhow::Error::msg("Node Info could not be retrieved")),
         },
-        Err(e) => Err(anyhow::Error::msg("Node Info could not be retrieved")),
+        Err(_) => Err(anyhow::Error::msg("Node Info could not be retrieved")),
     }
 }
 
