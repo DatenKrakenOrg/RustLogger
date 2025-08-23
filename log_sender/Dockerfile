@@ -1,3 +1,6 @@
+RUN adduser -D appuser
+USER appuser
+
 FROM rust:trixie AS builder
 WORKDIR /usr/src/log_sender
 COPY . .

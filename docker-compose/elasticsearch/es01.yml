@@ -34,7 +34,7 @@ xpack.monitoring.collection.enabled: true
 bootstrap.memory_lock: false
 
 # Node specialization - Master Coordinator
-node.roles: ["master", "ml", "remote_cluster_client"]
+node.roles: ["master","data", "ingest", "ml", "remote_cluster_client"]
 node.attr.node_type: coordinator
 
 # Coordinator optimizations

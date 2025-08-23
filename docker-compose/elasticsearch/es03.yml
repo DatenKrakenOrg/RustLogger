@@ -34,7 +34,7 @@ xpack.monitoring.collection.enabled: true
 bootstrap.memory_lock: false
 
 # Node specialization - Data Worker
-node.roles: ["data", "ingest", "remote_cluster_client"]
+node.roles: ["master","data", "ingest", "remote_cluster_client"]
 node.attr.node_type: worker
 
 # Worker optimizations
