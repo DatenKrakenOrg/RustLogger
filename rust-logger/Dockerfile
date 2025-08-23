@@ -9,7 +9,10 @@
 RUN adduser -D appuser
 USER appuser
 
-ARG RUST_VERSION=1.88.0
+RUN adduser -D appuser
+USER appuser
+
+ARG RUST_VERSION=1.89.0
 ARG APP_NAME=rust-logger
 
 ################################################################################
@@ -49,7 +52,7 @@ cp ./target/release/$APP_NAME /bin/log_gen
 # By specifying the "3.18" tag, it will use version 3.18 of alpine. If
 # reproducibility is important, consider using a digest
 # (e.g., alpine@sha256:664888ac9cfd28068e062c991ebcff4b4c7307dc8dd4df9e728bedde5c449d91).
-FROM alpine:3.18 AS final
+FROM alpine:3.22 AS final
 
 # Copy the executable from the "build" stage.
 COPY --from=build /bin/log_gen /bin/

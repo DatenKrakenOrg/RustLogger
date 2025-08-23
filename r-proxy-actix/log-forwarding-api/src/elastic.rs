@@ -8,7 +8,7 @@ use elasticsearch::{
     },
     indices::{IndicesCreateParts, IndicesExistsParts},
 };
-use env_logger::builder;
+//use env_logger::builder;
 use serde_json::{Value, json};
 use std::env;
 use url::Url;
