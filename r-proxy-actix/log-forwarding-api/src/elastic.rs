@@ -1,7 +1,7 @@
-use crate::serializable_objects::LogEntry;
+use crate::serializable_objects::{LogEntry, LogQuery, SearchQuery};
 use anyhow::{Context, Ok, Result};
 use elasticsearch::{
-    Elasticsearch, IndexParts,
+    Elasticsearch, IndexParts, SearchParts,
     auth::Credentials,
     http::transport::{
         SingleNodeConnectionPool, TransportBuilder,
@@ -143,6 +143,127 @@ pub async fn get_nodes(client: &Elasticsearch) -> Result<String> {
         },
         Err(_) => Err(anyhow::Error::msg("Node Info could not be retrieved")),
     }
+}
+
+pub async fn query_logs(
+    index_name: &str,
+    client: &Elasticsearch,
+    query: &LogQuery,
+) -> Result<Vec<LogEntry>> {
+    let mut must_clauses = Vec::new();
+    
+    if let Some(level) = &query.level {
+        must_clauses.push(json!({
+            "term": { "level": level.to_uppercase() }
+        }));
+    }
+    
+    if let Some(device) = &query.device {
+        must_clauses.push(json!({
+            "term": { "msg.device": device }
+        }));
+    }
+    
+    if query.from.is_some() || query.to.is_some() {
+        let mut range_query = json!({ "range": { "timestamp": {} } });
+        if let Some(from) = query.from {
+            range_query["range"]["timestamp"]["gte"] = json!(from.to_rfc3339());
+        }
+        if let Some(to) = query.to {
+            range_query["range"]["timestamp"]["lte"] = json!(to.to_rfc3339());
+        }
+        must_clauses.push(range_query);
+    }
+    
+    let search_body = if must_clauses.is_empty() {
+        json!({
+            "query": { "match_all": {} },
+            "sort": [{ "timestamp": { "order": "desc" } }],
+            "size": query.limit.unwrap_or(100),
+            "from": query.offset.unwrap_or(0)
+        })
+    } else {
+        json!({
+            "query": { "bool": { "must": must_clauses } },
+            "sort": [{ "timestamp": { "order": "desc" } }],
+            "size": query.limit.unwrap_or(100),
+            "from": query.offset.unwrap_or(0)
+        })
+    };
+    
+    let response = client
+        .search(SearchParts::Index(&[index_name]))
+        .body(search_body)
+        .send()
+        .await
+        .context("Search request failed")?;
+        
+    let response_body: Value = response
+        .json()
+        .await
+        .context("Failed to parse search response")?;
+        
+    let hits = response_body["hits"]["hits"]
+        .as_array()
+        .context("Invalid search response format")?;
+        
+    let mut logs = Vec::new();
+    for hit in hits {
+        if let Some(source) = hit["_source"].as_object() {
+            let log_entry: LogEntry = serde_json::from_value(json!(source))
+                .context("Failed to deserialize log entry")?;
+            logs.push(log_entry);
+        }
+    }
+    
+    Ok(logs)
+}
+
+pub async fn search_logs(
+    index_name: &str,
+    client: &Elasticsearch,
+    search: &SearchQuery,
+) -> Result<Vec<LogEntry>> {
+    let search_body = json!({
+        "query": {
+            "multi_match": {
+                "query": search.query,
+                "fields": ["msg.msg", "msg.device", "level"],
+                "type": "best_fields",
+                "fuzziness": "AUTO"
+            }
+        },
+        "sort": [{ "timestamp": { "order": "desc" } }],
+        "size": search.limit.unwrap_or(100),
+        "from": search.offset.unwrap_or(0)
+    });
+    
+    let response = client
+        .search(SearchParts::Index(&[index_name]))
+        .body(search_body)
+        .send()
+        .await
+        .context("Search request failed")?;
+        
+    let response_body: Value = response
+        .json()
+        .await
+        .context("Failed to parse search response")?;
+        
+    let hits = response_body["hits"]["hits"]
+        .as_array()
+        .context("Invalid search response format")?;
+        
+    let mut logs = Vec::new();
+    for hit in hits {
+        if let Some(source) = hit["_source"].as_object() {
+            let log_entry: LogEntry = serde_json::from_value(json!(source))
+                .context("Failed to deserialize log entry")?;
+            logs.push(log_entry);
+        }
+    }
+    
+    Ok(logs)
 }
 
 /// Creates a log mapping. This is needed in order to create a index in elastic search. It's format matches the logs.
