@@ -7,9 +7,6 @@ FROM rust:${RUST_VERSION}-alpine AS build
 ARG APP_NAME
 WORKDIR /app
 
-RUN adduser -D appuser
-USER appuser
-
 # Install build dependencies
 RUN apk add --no-cache clang lld musl-dev git pkgconfig openssl-dev openssl-libs-static
 
@@ -24,6 +21,11 @@ RUN --mount=type=bind,source=src,target=src \
     cp ./target/release/log-forwarding-api /usr/local/bin/log-forwarding-api
 
 FROM alpine:3.22 AS final
+
 RUN apk add --no-cache curl
+
+RUN adduser -D appuser
+USER appuser
+
 COPY --from=build /usr/local/bin/log-forwarding-api /usr/local/bin/log-forwarding-api
 CMD ["log-forwarding-api"]

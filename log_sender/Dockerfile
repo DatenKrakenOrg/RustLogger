@@ -5,9 +5,6 @@ FROM rust:${RUST_VERSION}-alpine AS build
 ARG APP_NAME
 WORKDIR /app
 
-RUN adduser -D appuser
-USER appuser
-
 # Install build dependencies
 RUN apk add --no-cache musl-dev gcc pkgconfig openssl-dev openssl-libs-static clang lld git
 
@@ -22,6 +19,11 @@ RUN --mount=type=bind,source=src,target=src \
     cp ./target/release/log_sender /usr/local/bin/log_sender
 
 FROM alpine:3.22
+
 RUN apk add --no-cache curl
+
+RUN adduser -D appuser
+USER appuser
+
 COPY --from=build /usr/local/bin/log_sender /usr/local/bin/log_sender
 CMD ["log_sender"]
