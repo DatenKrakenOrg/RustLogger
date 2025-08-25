@@ -28,7 +28,7 @@ services:
   metricbeat:
     image: docker.elastic.co/beats/metricbeat:8.19.0
     container_name: metricbeat
-    env_file: env/elasticsearch.env
+    env_file: .env
     volumes:
       - ./metricbeat/metricbeat.yml:/usr/share/metricbeat/metricbeat.yml:ro
       - certs:/usr/share/metricbeat/certs
@@ -61,9 +61,7 @@ services:
     build:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
-    env_file:
-      - env/api.env
-      - env/elasticsearch.env
+    env_file: .env
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/whoareyou"]
@@ -83,9 +81,7 @@ services:
     build:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
-    env_file:
-      - env/api.env
-      - env/elasticsearch.env
+    env_file: .env
     restart: unless-stopped
     networks:
       - logger-network
@@ -105,9 +101,7 @@ services:
     build:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
-    env_file:
-      - env/api.env
-      - env/elasticsearch.env
+    env_file: .env
     restart: unless-stopped
     networks:
       - logger-network
@@ -128,8 +122,7 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     networks:
       - logger-network
-    env_file:
-      - env/elasticsearch.env
+    env_file: .env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
     user: "0"
@@ -201,8 +194,7 @@ services:
         condition: service_healthy
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     container_name: es01
-    env_file:
-      - env/elasticsearch.env
+    env_file: .env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata01:/usr/share/elasticsearch/data
@@ -234,8 +226,7 @@ services:
         condition: service_healthy
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     container_name: es02
-    env_file:
-      - env/elasticsearch.env
+    env_file: .env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata02:/usr/share/elasticsearch/data
@@ -265,8 +256,7 @@ services:
         condition: service_healthy
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     container_name: es03
-    env_file:
-      - env/elasticsearch.env
+    env_file: .env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata03:/usr/share/elasticsearch/data
@@ -296,8 +286,7 @@ services:
         condition: service_healthy
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     container_name: es04
-    env_file:
-      - env/elasticsearch.env
+    env_file: .env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata04:/usr/share/elasticsearch/data
@@ -330,8 +319,7 @@ services:
       es03:
         condition: service_healthy
     image: docker.elastic.co/kibana/kibana:8.19.0
-    env_file:
-      - env/elasticsearch.env
+    env_file: .env
     networks:
       - logger-network
     volumes:
@@ -363,8 +351,7 @@ services:
     build:
       context: ../log_sender/
       dockerfile: Dockerfile
-    env_file:
-      - env/logging.env
+    env_file: .env
     depends_on:
       - log-forwarding-lb
     volumes:
