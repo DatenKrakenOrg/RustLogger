@@ -22,8 +22,5 @@ FROM alpine:3.22
 
 RUN apk add --no-cache curl
 
-RUN adduser -D appuser
-USER appuser
-
 COPY --from=build /usr/local/bin/log_sender /usr/local/bin/log_sender
 CMD ["log_sender"]

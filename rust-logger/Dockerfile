@@ -51,8 +51,5 @@ FROM alpine:3.22 AS final
 # Copy the executable from the "build" stage.
 COPY --from=build /bin/log_gen /bin/
 
-RUN adduser -D appuser
-USER appuser
-
 # What the container should run when it is started.
 CMD ["/bin/log_gen" ,"-p","/etc/logs/logs.csv"]

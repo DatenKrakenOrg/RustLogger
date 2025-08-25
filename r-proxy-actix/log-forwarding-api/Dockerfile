@@ -24,8 +24,5 @@ FROM alpine:3.22 AS final
 
 RUN apk add --no-cache curl
 
-RUN adduser -D appuser
-USER appuser
-
 COPY --from=build /usr/local/bin/log-forwarding-api /usr/local/bin/log-forwarding-api
 CMD ["log-forwarding-api"]
