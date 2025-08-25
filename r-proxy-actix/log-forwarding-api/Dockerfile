@@ -1,5 +1,4 @@
-RUN adduser -D appuser
-USER appuser
+
 
 ARG RUST_VERSION=1.89.0
 ARG APP_NAME=log-forwarding-api
@@ -7,6 +6,9 @@ ARG APP_NAME=log-forwarding-api
 FROM rust:${RUST_VERSION}-alpine AS build
 ARG APP_NAME
 WORKDIR /app
+
+RUN adduser -D appuser
+USER appuser
 
 # Install build dependencies
 RUN apk add --no-cache clang lld musl-dev git pkgconfig openssl-dev openssl-libs-static

@@ -6,12 +6,6 @@
 
 # Want to help us make this template better? Share your feedback here: https://forms.gle/ybq9Krt8jtBL3iCk7
 
-RUN adduser -D appuser
-USER appuser
-
-RUN adduser -D appuser
-USER appuser
-
 ARG RUST_VERSION=1.89.0
 ARG APP_NAME=rust-logger
 
@@ -21,6 +15,9 @@ ARG APP_NAME=rust-logger
 FROM rust:${RUST_VERSION}-alpine AS build
 ARG APP_NAME
 WORKDIR /app
+
+RUN adduser -D appuser
+USER appuser
 
 # Install host build dependencies.
 RUN apk add --no-cache clang lld musl-dev git
