@@ -1,14 +1,18 @@
 use crate::serializable_objects::LogEntry;
-use anyhow::{Context, Result};
+use anyhow::{Context, Ok, Result};
 use elasticsearch::{
     Elasticsearch, IndexParts,
     auth::Credentials,
-    http::transport::{SingleNodeConnectionPool, TransportBuilder},
+    http::transport::{
+        SingleNodeConnectionPool, TransportBuilder,
+    },
     indices::{IndicesCreateParts, IndicesExistsParts},
 };
+//use env_logger::builder;
 use serde_json::{Value, json};
 use std::env;
 use url::Url;
+use std::result::Result::Ok as ResultOk;
 
 /// Creates a elastic search client
 ///
@@ -21,8 +25,10 @@ pub fn create_client() -> Result<Elasticsearch> {
     let password: String = env::var("ELASTIC_PASSWORD").context("ELASTIC_PASSWORD not set")?;
     let str_url: String = env::var("ELASTIC_URL").context("ELASTIC_URL not set")?;
 
-    let url: Url = Url::parse(&format!("https://{}", str_url)).context("Invalid ES URL")?;
-    //TODO: Currently only one node in cluster is connected to -> Load Balancer?
+    // Parse URL with proper scheme detection
+    let url: Url = Url::parse(&str_url).context("Invalid ES URL")?;
+
+
     let pool: SingleNodeConnectionPool = SingleNodeConnectionPool::new(url);
 
     //Since of a local project we disable cert and only use basic authentication
@@ -54,6 +60,17 @@ pub fn create_client() -> Result<Elasticsearch> {
 pub async fn create_logs_index(index_name: &str, connector: &Elasticsearch) -> Result<String> {
     let mapping = create_log_mapping();
 
+    // Get index settings from environment variables with defaults
+    let replicas: u32 = env::var("ELASTIC_INDEX_REPLICAS")
+        .unwrap_or_else(|_| "1".to_string())
+        .parse()
+        .unwrap_or(1);
+    
+    let shards: u32 = env::var("ELASTIC_INDEX_SHARDS")
+        .unwrap_or_else(|_| "1".to_string())
+        .parse()
+        .unwrap_or(1);
+
     // Check if index exists
     let exists = connector
         .indices()
@@ -71,6 +88,10 @@ pub async fn create_logs_index(index_name: &str, connector: &Elasticsearch) -> R
         .indices()
         .create(IndicesCreateParts::Index(index_name))
         .body(json!({
+            "settings": {
+                "number_of_replicas": replicas,
+                "number_of_shards": shards
+            },
             "mappings": mapping
         }))
         .send()
@@ -105,6 +126,23 @@ pub async fn send_document(
         "Log entry inserted: {}",
         serde_json::to_string_pretty(log_entry)?
     ))
+}
+
+pub async fn get_nodes(client: &Elasticsearch) -> Result<String> {
+    let result = client
+        .nodes()
+        .info(elasticsearch::nodes::NodesInfoParts::None)
+        .send()
+        .await
+        .context("Node Info request failed");
+
+    match result {
+        ResultOk(r) => match r.text().await {
+            ResultOk(s) => Ok(s),
+            Err(_) => Err(anyhow::Error::msg("Node Info could not be retrieved")),
+        },
+        Err(_) => Err(anyhow::Error::msg("Node Info could not be retrieved")),
+    }
 }
 
 /// Creates a log mapping. This is needed in order to create a index in elastic search. It's format matches the logs.
