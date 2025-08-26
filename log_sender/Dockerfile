@@ -1,26 +1,45 @@
-ARG RUST_VERSION=1.89.0
+ARG RUST_VERSION=latest
 ARG APP_NAME=log_sender
 
-FROM rust:${RUST_VERSION}-alpine AS build
+FROM rust:${RUST_VERSION} AS builder
 ARG APP_NAME
+WORKDIR /code
+
+# Install host build dependencies.
+RUN apt-get update && apt-get install -y libssl-dev
+
+# fetch all dependencies and cache it for further builds
+RUN cargo init
+
+# Layer Build of defined dependencies
+COPY Cargo.toml Cargo.toml
+COPY Cargo.lock Cargo.lock
+RUN cargo fetch
+# Prebuild libs with cache
+RUN --mount=type=cache,target=/usr/local/cargo/registry cargo build --release
+
+# copy actual source code
+COPY src/ src/
+
+# Test and build with cache from above (contains workaround)
+RUN --mount=type=cache,target=/usr/local/cargo/registry <<EOF
+  set -e
+  # update timestamps to force a new build
+  touch /code/src/main.rs
+  #cargo test --release
+  cargo build --release
+EOF
+
+# Actual container
+FROM bitnami/minideb:bookworm
+
+# add dependencies for run-container
+RUN apt-get update && apt-get install -y libssl-dev
+
 WORKDIR /app
 
-# Install build dependencies
-RUN apk add --no-cache musl-dev gcc pkgconfig openssl-dev openssl-libs-static clang lld git
+COPY --from=builder /code/target/release/log_sender log_sender
 
-# Build with cache mounts
-RUN --mount=type=bind,source=src,target=src \
-    --mount=type=bind,source=Cargo.toml,target=Cargo.toml \
-    --mount=type=bind,source=Cargo.lock,target=Cargo.lock \
-    --mount=type=cache,target=/app/target/ \
-    --mount=type=cache,target=/usr/local/cargo/git/db \
-    --mount=type=cache,target=/usr/local/cargo/registry/ \
-    cargo build --locked --release && \
-    cp ./target/release/log_sender /usr/local/bin/log_sender
+USER 1001
 
-FROM alpine:3.22
-
-RUN apk add --no-cache curl
-
-COPY --from=build /usr/local/bin/log_sender /usr/local/bin/log_sender
-CMD ["log_sender"]
+CMD ["/app/log_sender"]
