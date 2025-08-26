@@ -359,6 +359,8 @@ services:
       context: ../log_sender/
       dockerfile: Dockerfile
     env_file: ../log_sender/.env
+    environment:
+      - DEPLOYMENT=PROD
     depends_on:
       - log-forwarding-lb
     volumes:
