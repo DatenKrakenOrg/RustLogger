@@ -16,8 +16,8 @@ target
 log_gen_output*.csv
 
 .direnv
-.env
-env-example.env
+#.env
+#env-example.env
 
 # Environment configuration files (keep examples)
 docker-compose/env/*.env
