@@ -1,0 +1,18 @@
+# Server settings
+server.name: kibana
+server.host: 0.0.0.0
+server.port: 5601
+
+# Elasticsearch connection
+elasticsearch.hosts: ["http://haproxy:9200"]
+elasticsearch.username: kibana_system
+elasticsearch.password: ${KIBANA_PASSWORD}
+
+# Security and encryption
+xpack.encryptedSavedObjects.encryptionKey: ${KIBANA_ENCRYPTION_KEY}
+
+# Logging
+logging.root.level: warn
+
+# Monitoring
+monitoring.ui.container.elasticsearch.enabled: true

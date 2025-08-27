@@ -1,0 +1,5 @@
+- module: haproxy
+  metricsets: ["info", "stat"]
+  period: 10s
+  hosts: ["tcp://haproxy:9999"]
+  enabled: true

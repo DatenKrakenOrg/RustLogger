@@ -1,0 +1,17 @@
+metricbeat.config.modules:
+  path: ${path.config}/modules.d/*.yml
+  reload.enabled: false
+
+output.elasticsearch:
+  hosts: ["http://haproxy:9200"]
+  username: "elastic"
+  password: "${ELASTIC_PASSWORD}"
+
+setup.kibana:
+  host: "http://haproxy:5601"
+
+processors:
+  - add_cloud_metadata: ~
+  - add_docker_metadata: ~
+
+monitoring.enabled: true

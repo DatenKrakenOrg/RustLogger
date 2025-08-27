@@ -3,8 +3,42 @@ networks:
     driver: bridge
 
 services:
-  # r-proxy-actix
+  haproxy:
+    image: haproxy:latest
+    container_name: haproxy
+    ports:
+      - "9200:9200" # Expose HAProxy for Elasticsearch
+      - "8404:8404" # Expose HAProxy stats page
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - certs:/usr/share/haproxy/certs
+    networks:
+      - logger-network
+    depends_on:
+      es01:
+        condition: service_healthy
+      es02:
+        condition: service_healthy
+      es03:
+        condition: service_healthy
+      es04:
+        condition: service_healthy
+    restart: unless-stopped
 
+  metricbeat:
+    image: docker.elastic.co/beats/metricbeat:8.19.0
+    container_name: metricbeat
+    env_file: .env
+    volumes:
+      - ./metricbeat/metricbeat.yml:/usr/share/metricbeat/metricbeat.yml:ro
+      - certs:/usr/share/metricbeat/certs
+    networks:
+      - logger-network
+    depends_on:
+      - haproxy
+    restart: unless-stopped
+
+  # r-proxy-actix
   log-forwarding-lb:
     build:
       context: ../r-proxy-actix/nginx
@@ -27,10 +61,7 @@ services:
     build:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
-    env_file:
-      - ../r-proxy-actix/log-forwarding-api/.env
-    environment:
-      - DEPLOYMENT=PROD
+    env_file: .env
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/whoareyou"]
@@ -41,12 +72,8 @@ services:
     networks:
       - logger-network
     depends_on:
-      es01:
-        condition: service_healthy
-      es02:
-        condition: service_healthy
-      es03:
-        condition: service_healthy
+      haproxy:
+        condition: service_started
       elasticsetup:
         condition: service_completed_successfully
 
@@ -54,10 +81,7 @@ services:
     build:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
-    env_file:
-      - ../r-proxy-actix/log-forwarding-api/.env
-    environment:
-      - DEPLOYMENT=PROD
+    env_file: .env
     restart: unless-stopped
     networks:
       - logger-network
@@ -68,12 +92,8 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      es01:
-        condition: service_healthy
-      es02:
-        condition: service_healthy
-      es03:
-        condition: service_healthy
+      haproxy:
+        condition: service_started
       elasticsetup:
         condition: service_completed_successfully
 
@@ -81,10 +101,7 @@ services:
     build:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
-    env_file:
-      - ../r-proxy-actix/log-forwarding-api/.env
-    environment:
-      - DEPLOYMENT=PROD
+    env_file: .env
     restart: unless-stopped
     networks:
       - logger-network
@@ -95,23 +112,17 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      es01:
-        condition: service_healthy
-      es02:
-        condition: service_healthy
-      es03:
-        condition: service_healthy
+      haproxy:
+        condition: service_started
       elasticsetup:
         condition: service_completed_successfully
-  
 
   # elastic-stack
   elasticsetup:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     networks:
       - logger-network
-    env_file:
-      - .env
+    env_file: .env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
     user: "0"
@@ -151,6 +162,12 @@ services:
           "      - localhost\n"\
           "    ip:\n"\
           "      - 127.0.0.1\n"\
+          "  - name: es04\n"\
+          "    dns:\n"\
+          "      - es04\n"\
+          "      - localhost\n"\
+          "    ip:\n"\
+          "      - 127.0.0.1\n"\
           > config/certs/instances.yml;
           bin/elasticsearch-certutil cert --silent --pem -out config/certs/certs.zip --in config/certs/instances.yml --ca-cert config/certs/ca/ca.crt --ca-key config/certs/ca/ca.key;
           unzip config/certs/certs.zip -d config/certs;
@@ -176,35 +193,18 @@ services:
       elasticsetup:
         condition: service_healthy
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
-    env_file:
-      - .env
+    container_name: es01
+    env_file: .env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata01:/usr/share/elasticsearch/data
-    # ports:
+      - ./elasticsearch/es01.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    #ports:
     #   - ${ES_PORT}:9200
     networks:
       - logger-network
     environment:
-      - node.name=es01
-      - cluster.name=${CLUSTER_NAME}
-      - cluster.initial_master_nodes=es01,es02,es03
-      - discovery.seed_hosts=es02,es03
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
-      - bootstrap.memory_lock=true
-      - xpack.security.enabled=true
-      - xpack.security.http.ssl.enabled=true
-      - xpack.security.http.ssl.key=certs/es01/es01.key
-      - xpack.security.http.ssl.certificate=certs/es01/es01.crt
-      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
-      - xpack.security.transport.ssl.enabled=true
-      - xpack.security.transport.ssl.key=certs/es01/es01.key
-      - xpack.security.transport.ssl.certificate=certs/es01/es01.crt
-      - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
-      - xpack.security.transport.ssl.verification_mode=certificate
-      - xpack.license.self_generated.type=${LICENSE}
-      - xpack.ml.use_auto_machine_memory_percent=true
-      - bootstrap.memory_lock=false
     mem_limit: ${MEM_LIMIT}
     ulimits:
       memlock:
@@ -222,35 +222,19 @@ services:
 
   es02:
     depends_on:
-      - es01
+      elasticsetup:
+        condition: service_healthy
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
-    env_file:
-      - .env
+    container_name: es02
+    env_file: .env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata02:/usr/share/elasticsearch/data
+      - ./elasticsearch/es02.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
     networks:
       - logger-network
     environment:
-      - node.name=es02
-      - cluster.name=${CLUSTER_NAME}
-      - cluster.initial_master_nodes=es01,es02,es03
-      - discovery.seed_hosts=es01,es03
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
-      - bootstrap.memory_lock=true
-      - xpack.security.enabled=true
-      - xpack.security.http.ssl.enabled=true
-      - xpack.security.http.ssl.key=certs/es02/es02.key
-      - xpack.security.http.ssl.certificate=certs/es02/es02.crt
-      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
-      - xpack.security.transport.ssl.enabled=true
-      - xpack.security.transport.ssl.key=certs/es02/es02.key
-      - xpack.security.transport.ssl.certificate=certs/es02/es02.crt
-      - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
-      - xpack.security.transport.ssl.verification_mode=certificate
-      - xpack.license.self_generated.type=${LICENSE}
-      - xpack.ml.use_auto_machine_memory_percent=true
-      - bootstrap.memory_lock=false
     mem_limit: ${MEM_LIMIT}
     ulimits:
       memlock:
@@ -268,35 +252,49 @@ services:
 
   es03:
     depends_on:
-      - es02
+      elasticsetup:
+        condition: service_healthy
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
-    env_file:
-      - .env
+    container_name: es03
+    env_file: .env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata03:/usr/share/elasticsearch/data
+      - ./elasticsearch/es03.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
     networks:
       - logger-network
     environment:
-      - node.name=es03
-      - cluster.name=${CLUSTER_NAME}
-      - cluster.initial_master_nodes=es01,es02,es03
-      - discovery.seed_hosts=es01,es02
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
-      - bootstrap.memory_lock=true
-      - xpack.security.enabled=true
-      - xpack.security.http.ssl.enabled=true
-      - xpack.security.http.ssl.key=certs/es03/es03.key
-      - xpack.security.http.ssl.certificate=certs/es03/es03.crt
-      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
-      - xpack.security.transport.ssl.enabled=true
-      - xpack.security.transport.ssl.key=certs/es03/es03.key
-      - xpack.security.transport.ssl.certificate=certs/es03/es03.crt
-      - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
-      - xpack.security.transport.ssl.verification_mode=certificate
-      - xpack.license.self_generated.type=${LICENSE}
-      - xpack.ml.use_auto_machine_memory_percent=true
-      - bootstrap.memory_lock=false
+    mem_limit: ${MEM_LIMIT}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+
+  es04:
+    depends_on:
+      elasticsetup:
+        condition: service_healthy
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    container_name: es04
+    env_file: .env
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+      - esdata04:/usr/share/elasticsearch/data
+      - ./elasticsearch/es04.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    networks:
+      - logger-network
+    environment:
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
     mem_limit: ${MEM_LIMIT}
     ulimits:
       memlock:
@@ -321,20 +319,15 @@ services:
       es03:
         condition: service_healthy
     image: docker.elastic.co/kibana/kibana:8.19.0
+    env_file: .env
     networks:
       - logger-network
     volumes:
       - certs:/usr/share/kibana/config/certs
       - kibanadata:/usr/share/kibana/data
+      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
     ports:
-      - 5601:5601
-    environment:
-      - SERVERNAME=kibana
-      - ELASTICSEARCH_HOSTS=https://es01:9200
-      - ELASTICSEARCH_USERNAME=kibana_system
-      - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD}
-      - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=config/certs/ca/ca.crt
-    mem_limit: ${MEM_LIMIT}
+       - 5601:5601
     healthcheck:
       test:
         [
@@ -358,9 +351,7 @@ services:
     build:
       context: ../log_sender/
       dockerfile: Dockerfile
-    env_file: ../log_sender/.env
-    environment:
-      - DEPLOYMENT=PROD
+    env_file: .env
     depends_on:
       - log-forwarding-lb
     volumes:
@@ -376,6 +367,8 @@ volumes:
   esdata02:
     driver: local
   esdata03:
+    driver: local
+  esdata04:
     driver: local
   kibanadata:
     driver: local
