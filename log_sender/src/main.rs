@@ -28,7 +28,9 @@ impl Config {
     /// - Ok(Config) if all required variables are present and valid
     /// - Err(String) with error message if any variable is missing or invalid
     fn load() -> Result<Self, String> {
-        dotenv().ok(); // Load .env file
+        if env::var("DEPLOYMENT").unwrap_or_default() != "PROD" {
+            dotenv().ok();
+        }
         Ok(Self {
             endless: env::var("ENDLESS")
                 .map_err(|_| "ENDLESS environment variable is missing")?
