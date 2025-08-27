@@ -1,4 +1,4 @@
-use crate::serializable_objects::LogEntry;
+// Remove the import since we're now using serde_json::Value
 use anyhow::{Context, Ok, Result};
 use elasticsearch::{
     Elasticsearch, IndexParts,
@@ -109,11 +109,11 @@ pub async fn create_logs_index(index_name: &str, connector: &Elasticsearch) -> R
 pub async fn send_document(
     index_name: &str,
     client: &Elasticsearch,
-    log_entry: &LogEntry,
+    log_document: &serde_json::Value,
 ) -> Result<String> {
     let response = client
         .index(IndexParts::Index(index_name))
-        .body(log_entry)
+        .body(log_document)
         .send()
         .await
         .context("Log entry request failed")?;
@@ -124,7 +124,7 @@ pub async fn send_document(
 
     Ok(format!(
         "Log entry inserted: {}",
-        serde_json::to_string_pretty(log_entry)?
+        serde_json::to_string_pretty(log_document)?
     ))
 }
 

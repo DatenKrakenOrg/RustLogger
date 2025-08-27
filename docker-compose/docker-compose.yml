@@ -49,6 +49,12 @@ services:
     networks:
       - logger-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -O /dev/null http://localhost || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     depends_on:
       log-forwarding-api-1:
         condition: service_healthy
@@ -69,6 +75,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    volumes:
+      - ../message_types.toml:/etc/config/message_types.toml:ro
     networks:
       - logger-network
     depends_on:
@@ -83,6 +91,8 @@ services:
       dockerfile: Dockerfile
     env_file: .env
     restart: unless-stopped
+    volumes:
+      - ../message_types.toml:/etc/config/message_types.toml:ro
     networks:
       - logger-network
     healthcheck:
@@ -103,6 +113,8 @@ services:
       dockerfile: Dockerfile
     env_file: .env
     restart: unless-stopped
+    volumes:
+      - ../message_types.toml:/etc/config/message_types.toml:ro
     networks:
       - logger-network
     healthcheck:
@@ -344,6 +356,7 @@ services:
       dockerfile: Dockerfile
     volumes: 
       - logs:/etc/logs
+      - ../message_types.toml:/etc/config/message_types.toml:ro
     networks:
       - logger-network
 
@@ -353,9 +366,13 @@ services:
       dockerfile: Dockerfile
     env_file: .env
     depends_on:
-      - log-forwarding-lb
+      log-forwarding-lb:
+        condition:  service_started
+      log_gen:
+        condition: service_completed_successfully
     volumes:
       - logs:/etc/logs
+      - ../message_types.toml:/etc/config/message_types.toml:ro
     networks:
       - logger-network
 
@@ -373,3 +390,4 @@ volumes:
   kibanadata:
     driver: local
   logs:
+    driver: local

@@ -1,12 +1,14 @@
+mod config;
+mod message_generator;
 mod log_collector;
 mod log_generator;
 mod logging_types;
 mod utility;
 use clap::Parser;
-use log_collector::{memory_optimized_df_collector, runtime_optimized_df_collector};
-use log_generator::log_gen::LogGen;
-use polars::{frame::DataFrame, io::SerWriter, prelude::CsvWriter};
-use std::{fs::File, path::PathBuf};
+use config::{MessageTypesConfig, FieldValue};
+use message_generator::MessageGenerator;
+
+use std::{fs::File, path::PathBuf, collections::HashMap};
 use utility::default_path;
 
 /// CLI Arguments to Parse via clap refer to documentation of clap for more information.
@@ -28,39 +30,80 @@ struct Args {
     /// Path to save csv to.
     #[arg(short, long, default_value_t = default_path())]
     path: String,
+    /// Message types to generate (comma-separated). If not specified, generates all types.
+    #[arg(short, long)]
+    types: Option<String>,
+    /// Path to message types configuration file.
+    #[arg(long, default_value = "message_types.toml")]
+    config_path: String,
 }
 
 fn main() {
     let args = Args::parse();
-    let log_gen = LogGen::new(args.count, (args.start_year, args.end_year)).expect("Error on log generation");
-    let mut collected_df: DataFrame;
+    
+    let config = MessageTypesConfig::load_from_file(&PathBuf::from(&args.config_path))
+        .expect("Failed to load message types configuration");
 
-    if args.memory_optimized {
-        collected_df = memory_optimized_df_collector(log_gen);
+    let selected_types: Vec<String> = if let Some(types_str) = &args.types {
+        types_str.split(',').map(|s| s.trim().to_string()).collect()
     } else {
-        collected_df = runtime_optimized_df_collector(log_gen);
+        config.list_types().into_iter().cloned().collect()
+    };
+
+    let base_path = PathBuf::from(&args.path);
+    let default_dir = PathBuf::from(".");
+    let parent_dir = base_path.parent().unwrap_or(&default_dir);
+
+    for message_type in &selected_types {
+        if let Some(type_config) = config.get_type(message_type) {
+            println!("Generating {} logs for message type: {}", args.count, message_type);
+            
+            let mut generator = MessageGenerator::new(
+                type_config.clone(), 
+                (args.start_year, args.end_year)
+            ).expect("Failed to create message generator");
+
+            let mut logs = Vec::new();
+            for _ in 0..args.count {
+                logs.push(generator.generate_message());
+            }
+
+            let file_path = parent_dir.join(format!("{}.csv", message_type));
+            save_logs_to_csv(&logs, &file_path, type_config.fields.keys().collect())
+                .expect("Failed to save logs to CSV");
+            
+            println!("Saved {} logs to: {}", args.count, file_path.display());
+        } else {
+            eprintln!("Unknown message type: {}", message_type);
+        }
     }
+}
 
-    // Save DataFrame to CSV if csv already exists, append index to filename
-    let mut file_path = PathBuf::from(&args.path);
-    if !("csv" == file_path.extension().unwrap()) {
-        panic!("Path must end with .csv: {}", file_path.display());
+fn save_logs_to_csv(
+    logs: &[HashMap<String, FieldValue>], 
+    file_path: &PathBuf, 
+    field_order: Vec<&String>
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut file = File::create(file_path)?;
+    
+    use std::io::Write;
+    
+    // Write header
+    let header = field_order.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(",");
+    writeln!(file, "{}", header)?;
+    
+    // Write data rows
+    for log in logs {
+        let row: Vec<String> = field_order
+            .iter()
+            .map(|field| {
+                log.get(*field)
+                    .map(|v| v.to_csv_string())
+                    .unwrap_or_else(|| "".to_string())
+            })
+            .collect();
+        writeln!(file, "{}", row.join(","))?;
     }
-
-    let mut index = 0;
-    while file_path.exists() {
-        file_path.pop();
-        index += 1;
-        file_path.push(format!("log_gen_output_{index}.csv"));
-    }
-
-    let mut file = File::create(file_path).expect("Could not create blank csv file!");
-
-    //Show dataframe for info
-    println!("{}", collected_df);
-    CsvWriter::new(&mut file)
-        .include_header(true)
-        .with_separator(b',')
-        .finish(&mut collected_df)
-        .expect("Could not create csv file from dataframe!");
+    
+    Ok(())
 }

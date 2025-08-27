@@ -1,0 +1,101 @@
+[[message_types]]
+name = "iot_sensor"
+index_name = "logs-iot-sensors"
+description = "IoT sensor readings with environmental data"
+
+[message_types.fields]
+timestamp = { type = "datetime" }
+level = { type = "enum", values = ["INFO", "WARN", "CRITICAL"] }
+temperature = { type = "float", range = [15.0, 35.0], unit = "celsius" }
+humidity = { type = "float", range = [0.0, 1.0], unit = "percentage" }
+device_id = { type = "string", pattern = "sensor_{id}", values = ["001", "002", "003"] }
+location = { type = "enum", values = ["greenhouse", "warehouse", "office"] }
+
+[message_types.logic]
+critical_temp_threshold = 30.0
+warn_temp_threshold = 25.0
+critical_humidity_threshold = 0.8
+warn_humidity_threshold = 0.6
+
+[[message_types]]
+name = "system_metrics"
+index_name = "logs-system-metrics"
+description = "System performance monitoring"
+
+[message_types.fields]
+timestamp = { type = "datetime" }
+level = { type = "enum", values = ["INFO", "WARN", "ERROR"] }
+cpu_usage = { type = "float", range = [0.0, 100.0], unit = "percentage" }
+memory_usage = { type = "float", range = [0.0, 100.0], unit = "percentage" }
+disk_usage = { type = "float", range = [0.0, 100.0], unit = "percentage" }
+hostname = { type = "string", pattern = "server-{id}", values = ["web01", "db01", "cache01"] }
+service = { type = "enum", values = ["nginx", "postgresql", "redis"] }
+
+[message_types.logic]
+critical_cpu_threshold = 90.0
+warn_cpu_threshold = 70.0
+critical_memory_threshold = 95.0
+warn_memory_threshold = 80.0
+
+[[message_types]]
+name = "timescaledb"
+index_name = "logs-timescaledb"
+description = "TimescaleDB database operations and performance"
+
+[message_types.fields]
+timestamp = { type = "datetime" }
+level = { type = "enum", values = ["DEBUG", "INFO", "WARN", "ERROR", "FATAL"] }
+query_duration = { type = "float", range = [1.0, 10000.0], unit = "milliseconds" }
+rows_affected = { type = "integer", range = [0.0, 1000000.0] }
+connection_count = { type = "integer", range = [1.0, 200.0] }
+database_name = { type = "enum", values = ["metrics_db", "sensor_data", "analytics"] }
+operation = { type = "enum", values = ["SELECT", "INSERT", "UPDATE", "DELETE", "VACUUM", "ANALYZE"] }
+table_name = { type = "string", pattern = "{prefix}_table", values = ["sensor", "metrics", "events"] }
+chunk_id = { type = "integer", range = [1000.0, 9999.0] }
+
+[message_types.logic]
+slow_query_threshold = 1000.0
+high_connection_threshold = 150
+error_operations = ["DELETE", "UPDATE"]
+vacuum_duration_multiplier = 5.0
+
+[[message_types]]
+name = "kafka"
+index_name = "logs-kafka"
+description = "Apache Kafka broker and consumer logs"
+
+[message_types.fields]
+timestamp = { type = "datetime" }
+level = { type = "enum", values = ["DEBUG", "INFO", "WARN", "ERROR"] }
+topic = { type = "string", pattern = "{env}.{service}", values = ["prod.orders", "prod.payments", "dev.events"] }
+partition = { type = "integer", range = [0.0, 15.0] }
+offset = { type = "integer", range = [1.0, 1000000.0] }
+lag = { type = "integer", range = [0.0, 50000.0] }
+broker_id = { type = "integer", range = [1.0, 5.0] }
+consumer_group = { type = "enum", values = ["order-processor", "analytics-consumer", "payment-handler"] }
+throughput = { type = "float", range = [100.0, 10000.0], unit = "messages_per_second" }
+batch_size = { type = "integer", range = [1.0, 1000.0] }
+
+[message_types.logic]
+high_lag_threshold = 10000
+low_throughput_threshold = 500.0
+error_conditions = ["high_lag", "low_throughput", "partition_unavailable"]
+rebalance_events = ["consumer_join", "consumer_leave"]
+
+[[message_types]]
+name = "application_logs"
+index_name = "logs-application"
+description = "Application runtime logs"
+
+[message_types.fields]
+timestamp = { type = "datetime" }
+level = { type = "enum", values = ["DEBUG", "INFO", "WARN", "ERROR", "FATAL"] }
+user_id = { type = "string", pattern = "user_{id}", range = [1000.0, 9999.0] }
+session_id = { type = "uuid" }
+endpoint = { type = "enum", values = ["/api/login", "/api/users", "/api/orders", "/api/payments"] }
+response_time = { type = "float", range = [10.0, 5000.0], unit = "milliseconds" }
+status_code = { type = "integer", values = ["200", "201", "400", "401", "403", "404", "500", "503"] }
+
+[message_types.logic]
+slow_response_threshold = 1000.0
+error_status_codes = [400, 401, 403, 404, 500, 503]

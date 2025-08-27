@@ -43,4 +43,4 @@ COPY --from=builder /code/target/release/${APP_NAME} ${APP_NAME}
 USER 1001
 
 # What the container should run when it is started.
-CMD ["/app/rust-logger" ,"-p","/etc/logs/logs.csv"]
+CMD ["/app/rust-logger", "--config-path", "/etc/config/message_types.toml", "--path", "/etc/logs/output.csv", "--count", "1000"]
