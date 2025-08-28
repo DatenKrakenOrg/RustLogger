@@ -60,14 +60,10 @@ services:
       - logger-network
     restart: unless-stopped
     depends_on:
-      log-forwarding-api-1:
-        condition: service_healthy
-      log-forwarding-api-2:
-        condition: service_healthy
       log-forwarding-api-3:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -O /dev/null http://localhost || exit 1"]
+      test: ["CMD-SHELL", "curl --ipv4 -fsS http://127.0.0.1/health -o /dev/null"]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -78,6 +74,7 @@ services:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
     env_file: .env
+    container_name: log-forwarding-api-1
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/whoareyou"]
@@ -90,13 +87,12 @@ services:
     depends_on:
       haproxy:
         condition: service_healthy
-      elasticsetup:
-        condition: service_completed_successfully
 
   log-forwarding-api-2:
     build:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
+    container_name: log-forwarding-api-2
     env_file: .env
     restart: unless-stopped
     networks:
@@ -108,15 +104,14 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      haproxy:
-        condition: service_healthy
-      elasticsetup:
-        condition: service_completed_successfully
+      log-forwarding-api-1:
+          condition: service_healthy
 
   log-forwarding-api-3:
     build:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
+    container_name: log-forwarding-api-3
     env_file: .env
     restart: unless-stopped
     networks:
@@ -128,14 +123,13 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      haproxy:
-        condition: service_healthy
-      elasticsetup:
-        condition: service_completed_successfully
+      log-forwarding-api-2:
+          condition: service_healthy
 
   # elastic-stack
   elasticsetup:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    container_name: elasicsetup
     networks:
       - logger-network
     env_file: .env
@@ -332,10 +326,8 @@ services:
       start_period: 20s
 
   kibana:
-    depends_on:
-      haproxy:
-        condition: service_healthy
     image: docker.elastic.co/kibana/kibana:8.19.0
+    container_name: kibana
     env_file: .env
     networks:
       - logger-network
@@ -354,20 +346,26 @@ services:
       interval: 10s
       timeout: 10s
       retries: 120
+    depends_on:
+      haproxy:
+        condition: service_healthy
 
-  log_gen:
+
+  log-gen:
     build:
       context: ../rust-logger/
       dockerfile: Dockerfile
+    container_name: log-gen
     volumes: 
       - logs:/etc/logs
     networks:
       - logger-network
 
-  log_sender:
+  log-sender:
     build:
       context: ../log_sender/
       dockerfile: Dockerfile
+    container_name: log-sender
     env_file: .env
     depends_on:
       log-forwarding-lb:
