@@ -6,9 +6,9 @@ use actix_web::{
 };
 use anyhow::{Context, Result};
 use dotenvy::dotenv;
-use elastic::{create_client, create_logs_index, send_document, get_nodes};
+use elastic::{create_client, create_logs_index, send_document, get_nodes, query_logs, search_logs};
 use elasticsearch::Elasticsearch;
-use serializable_objects::LogEntry;
+use serializable_objects::{LogEntry, LogQuery, SearchQuery};
 use std::env;
 use uuid::Uuid;
 
@@ -51,6 +51,30 @@ async fn elastic_node_info(data: web::Data<AppState>) -> ActixResult<HttpRespons
     Ok(HttpResponse::Ok().json(serde_json::json!({ "result": return_val })))
 }
 
+#[get("/logs")]
+async fn get_logs(
+    data: web::Data<AppState>,
+    query: web::Query<LogQuery>,
+) -> ActixResult<HttpResponse> {
+    let logs = query_logs(&data.index_name, &data.client, &query)
+        .await
+        .map_err(ErrorInternalServerError)?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "logs": logs })))
+}
+
+#[get("/logs/search")]
+async fn search_logs_endpoint(
+    data: web::Data<AppState>,
+    query: web::Query<SearchQuery>,
+) -> ActixResult<HttpResponse> {
+    let logs = search_logs(&data.index_name, &data.client, &query)
+        .await
+        .map_err(ErrorInternalServerError)?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "logs": logs })))
+}
+
 #[actix_web::main]
 async fn main() -> Result<()> {
     // Set DEPLOYMENT=PROD in docker compose!
@@ -78,6 +102,8 @@ async fn main() -> Result<()> {
             .service(send_log)
             .service(who_are_you)
             .service(elastic_node_info)
+            .service(get_logs)
+            .service(search_logs_endpoint)
             .wrap(Logger::default())
     })
     .bind(("0.0.0.0", 8080))?
