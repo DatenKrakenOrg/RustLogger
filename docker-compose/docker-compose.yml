@@ -4,11 +4,13 @@ networks:
 
 services:
   haproxy:
-    image: haproxy:latest
+    build:
+      context: ./haproxy/
+      dockerfile: Dockerfile
     container_name: haproxy
     ports:
       - "9200:9200" # Expose HAProxy for Elasticsearch
-      - "8404:8404" # Expose HAProxy stats page
+      - "8404:8404" # Expose HAProxy stats/healtz page
     volumes:
       - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
       - certs:/usr/share/haproxy/certs
@@ -23,6 +25,14 @@ services:
         condition: service_healthy
       es04:
         condition: service_healthy
+      elasticsetup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8404/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
 
   metricbeat:
@@ -50,18 +60,21 @@ services:
       - logger-network
     restart: unless-stopped
     depends_on:
-      log-forwarding-api-1:
-        condition: service_healthy
-      log-forwarding-api-2:
-        condition: service_healthy
       log-forwarding-api-3:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --ipv4 -fsS http://127.0.0.1/health -o /dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   log-forwarding-api-1:
     build:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
     env_file: .env
+    container_name: log-forwarding-api-1
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/whoareyou"]
@@ -73,14 +86,13 @@ services:
       - logger-network
     depends_on:
       haproxy:
-        condition: service_started
-      elasticsetup:
-        condition: service_completed_successfully
+        condition: service_healthy
 
   log-forwarding-api-2:
     build:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
+    container_name: log-forwarding-api-2
     env_file: .env
     restart: unless-stopped
     networks:
@@ -92,15 +104,14 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      haproxy:
-        condition: service_started
-      elasticsetup:
-        condition: service_completed_successfully
+      log-forwarding-api-1:
+          condition: service_healthy
 
   log-forwarding-api-3:
     build:
       context: ../r-proxy-actix/log-forwarding-api
       dockerfile: Dockerfile
+    container_name: log-forwarding-api-3
     env_file: .env
     restart: unless-stopped
     networks:
@@ -112,14 +123,13 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      haproxy:
-        condition: service_started
-      elasticsetup:
-        condition: service_completed_successfully
+      log-forwarding-api-2:
+          condition: service_healthy
 
   # elastic-stack
   elasticsetup:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    container_name: elasicsetup
     networks:
       - logger-network
     env_file: .env
@@ -214,11 +224,12 @@ services:
       test:
         [
           "CMD-SHELL",
-          "curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials'",
+          "curl -s --cacert config/certs/ca/ca.crt -u \"$ELASTIC_USERNAME:$ELASTIC_PASSWORD\" http://localhost:9200/_cluster/health?wait_for_status=green&timeout=10s && curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials' || exit 1",
         ]
       interval: 10s
       timeout: 10s
       retries: 120
+      start_period: 20s
 
   es02:
     depends_on:
@@ -244,11 +255,12 @@ services:
       test:
         [
           "CMD-SHELL",
-          "curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials'",
+          "curl -s --cacert config/certs/ca/ca.crt -u \"$ELASTIC_USERNAME:$ELASTIC_PASSWORD\" http://localhost:9200/_cluster/health?wait_for_status=green&timeout=10s && curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials' || exit 1",
         ]
       interval: 10s
       timeout: 10s
       retries: 120
+      start_period: 20s
 
   es03:
     depends_on:
@@ -274,11 +286,13 @@ services:
       test:
         [
           "CMD-SHELL",
-          "curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials'",
+          "curl -s --cacert config/certs/ca/ca.crt -u \"$ELASTIC_USERNAME:$ELASTIC_PASSWORD\" http://localhost:9200/_cluster/health?wait_for_status=green&timeout=10s && curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials' || exit 1",
+
         ]
       interval: 10s
       timeout: 10s
       retries: 120
+      start_period: 20s
 
   es04:
     depends_on:
@@ -304,21 +318,16 @@ services:
       test:
         [
           "CMD-SHELL",
-          "curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials'",
+          "curl -s --cacert config/certs/ca/ca.crt -u \"$ELASTIC_USERNAME:$ELASTIC_PASSWORD\" http://localhost:9200/_cluster/health?wait_for_status=green&timeout=10s && curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials' || exit 1",
         ]
       interval: 10s
       timeout: 10s
       retries: 120
+      start_period: 20s
 
   kibana:
-    depends_on:
-      es01:
-        condition: service_healthy
-      es02:
-        condition: service_healthy
-      es03:
-        condition: service_healthy
     image: docker.elastic.co/kibana/kibana:8.19.0
+    container_name: kibana
     env_file: .env
     networks:
       - logger-network
@@ -337,23 +346,32 @@ services:
       interval: 10s
       timeout: 10s
       retries: 120
+    depends_on:
+      haproxy:
+        condition: service_healthy
 
-  log_gen:
+
+  log-gen:
     build:
       context: ../rust-logger/
       dockerfile: Dockerfile
+    container_name: log-gen
     volumes: 
       - logs:/etc/logs
     networks:
       - logger-network
 
-  log_sender:
+  log-sender:
     build:
       context: ../log_sender/
       dockerfile: Dockerfile
+    #container_name: log-sender
     env_file: .env
     depends_on:
-      - log-forwarding-lb
+      log-forwarding-lb:
+        condition: service_healthy
+      log-gen:
+        condition: service_completed_successfully
     volumes:
       - logs:/etc/logs
     networks:
