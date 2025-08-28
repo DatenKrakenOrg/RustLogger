@@ -21,6 +21,7 @@ struct Config {
     repetitions: i32,
     logs_directory: String,
     endpoint: String,
+    secret: String,
     config_path: String,
 }
 
@@ -68,6 +69,8 @@ impl Config {
                 .unwrap_or_else(|_| "./".to_string()),
             endpoint: env::var("ENDPOINT")
                 .map_err(|_| "ENDPOINT environment variable is missing")?,
+            secret: env::var("SECRET_API_KEY")
+                .map_err(|_| "SECRET_API_KEY environment variable is missing")?,
             config_path: env::var("CONFIG_PATH")
                 .unwrap_or_else(|_| "message_types.toml".to_string()),
         })
@@ -137,7 +140,7 @@ async fn process_file(config: &Config, message_type: &MessageTypeConfig, csv_fil
     lines.next(); // Skip header
     
     for line in lines.map_while(Result::ok) {
-        send_log(&client, &config.endpoint, &message_type.name, line)
+        send_log(&client, &config.endpoint,&config.secret, &message_type.name, line)
             .await
             .expect("Failed to establish a connection")
     }
@@ -172,7 +175,7 @@ where
 /// * `Result<(), Error>` - Ok if successful, Error if HTTP request fails
 async fn send_log(
     client: &reqwest::Client, 
-    endpoint: &str, 
+    endpoint: &str,secret:&str, 
     message_type: &str, 
     csv_line: String
 ) -> Result<(), Error> {
@@ -183,7 +186,7 @@ async fn send_log(
         csv_line: csv_line.clone(),
     };
 
-    let res = client.post(endpoint).json(&payload).send().await?;
+    let res = client.post(endpoint).header("X-Api-Key", secret).json(&payload).send().await?;
 
     println!("Response: {}", res.status());
 
