@@ -32,7 +32,7 @@ EOF
 
 # Actual container
 FROM ubuntu:24.04
-
+ARG APP_NAME
 # add dependencies for run-container
 RUN apt-get update && apt-get install -y libssl-dev 
 
@@ -40,7 +40,11 @@ WORKDIR /app
 
 COPY --from=builder /code/target/release/${APP_NAME} ${APP_NAME}
 
-USER 1001
+RUN useradd -ms /bin/bash rust-log-user
+RUN mkdir /etc/logs
+RUN chown -R rust-log-user:rust-log-user /etc/logs
+USER rust-log-user
 
 # What the container should run when it is started.
+
 CMD ["/app/rust-logger" ,"-p","/etc/logs/logs.csv"]
