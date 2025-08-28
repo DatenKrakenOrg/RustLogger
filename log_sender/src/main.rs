@@ -29,6 +29,7 @@ pub struct MessageTypeConfig {
     pub name: String,
     pub index_name: String,
     pub description: String,
+    pub regex_pattern: String,
     pub fields: HashMap<String, toml::Value>,
     pub logic: Option<HashMap<String, toml::Value>>,
 }

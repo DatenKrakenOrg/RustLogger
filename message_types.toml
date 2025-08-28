@@ -2,6 +2,7 @@
 name = "iot_sensor"
 index_name = "logs-iot-sensors"
 description = "IoT sensor readings with environmental data"
+regex_pattern = "^(?P<timestamp>[^,]+),(?P<level>[^,]+),(?P<temperature>[^,]+),(?P<humidity>[^,]+),(?P<device_id>[^,]+),(?P<location>[^,]+)$"
 
 [message_types.fields]
 timestamp = { type = "datetime" }
@@ -21,6 +22,7 @@ warn_humidity_threshold = 0.6
 name = "system_metrics"
 index_name = "logs-system-metrics"
 description = "System performance monitoring"
+regex_pattern = "^(?P<timestamp>[^,]+),(?P<level>[^,]+),(?P<cpu_usage>[^,]+),(?P<memory_usage>[^,]+),(?P<disk_usage>[^,]+),(?P<hostname>[^,]+),(?P<service>[^,]+)$"
 
 [message_types.fields]
 timestamp = { type = "datetime" }
@@ -41,6 +43,7 @@ warn_memory_threshold = 80.0
 name = "timescaledb"
 index_name = "logs-timescaledb"
 description = "TimescaleDB database operations and performance"
+regex_pattern = "^(?P<timestamp>[^,]+),(?P<level>[^,]+),(?P<query_duration>[^,]+),(?P<rows_affected>[^,]+),(?P<connection_count>[^,]+),(?P<database_name>[^,]+),(?P<operation>[^,]+),(?P<table_name>[^,]+),(?P<chunk_id>[^,]+)$"
 
 [message_types.fields]
 timestamp = { type = "datetime" }
@@ -63,6 +66,7 @@ vacuum_duration_multiplier = 5.0
 name = "kafka"
 index_name = "logs-kafka"
 description = "Apache Kafka broker and consumer logs"
+regex_pattern = "^(?P<timestamp>[^,]+),(?P<level>[^,]+),(?P<topic>[^,]+),(?P<partition>[^,]+),(?P<offset>[^,]+),(?P<lag>[^,]+),(?P<broker_id>[^,]+),(?P<consumer_group>[^,]+),(?P<throughput>[^,]+),(?P<batch_size>[^,]+)$"
 
 [message_types.fields]
 timestamp = { type = "datetime" }
@@ -86,6 +90,7 @@ rebalance_events = ["consumer_join", "consumer_leave"]
 name = "application_logs"
 index_name = "logs-application"
 description = "Application runtime logs"
+regex_pattern = "^(?P<timestamp>[^,]+),(?P<level>[^,]+),(?P<user_id>[^,]+),(?P<session_id>[^,]+),(?P<endpoint>[^,]+),(?P<response_time>[^,]+),(?P<status_code>[^,]+)$"
 
 [message_types.fields]
 timestamp = { type = "datetime" }

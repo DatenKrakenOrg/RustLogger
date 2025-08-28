@@ -1247,6 +1247,7 @@ dependencies = [
  "dotenvy",
  "elasticsearch",
  "env_logger",
+ "regex",
  "serde",
  "serde_json",
  "toml",

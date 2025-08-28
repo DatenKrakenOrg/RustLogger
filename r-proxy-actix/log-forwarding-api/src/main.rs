@@ -11,11 +11,14 @@ use elasticsearch::Elasticsearch;
 use serializable_objects::{LogPayload, MessageTypeConfig, ConfigFile};
 use std::{env, fs, collections::HashMap};
 use uuid::Uuid;
+use regex::Regex;
+use std::sync::Arc;
 
 struct AppState {
     client: Elasticsearch,
     host_id: Uuid,
     message_types: HashMap<String, MessageTypeConfig>,
+    regex_cache: HashMap<String, Arc<Regex>>,
 }
 
 /// Endpoint used to send logs towards the es cluster.
@@ -34,12 +37,21 @@ async fn send_log(
         }
     };
 
-    // Parse CSV line into JSON object based on message type configuration
-    let log_document = match parse_csv_to_json(&payload.csv_line, message_type_config) {
+    // Parse CSV line into JSON object using regex pattern
+    let regex = match data.regex_cache.get(&payload.message_type) {
+        Some(regex) => regex,
+        None => {
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": format!("Regex pattern not compiled for message type: {}", payload.message_type)
+            })));
+        }
+    };
+
+    let log_document = match parse_csv_with_regex(&payload.csv_line, message_type_config, regex) {
         Ok(doc) => doc,
         Err(e) => {
             return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-                "error": format!("Failed to parse CSV: {}", e)
+                "error": format!("Failed to parse CSV with regex: {}", e)
             })));
         }
     };
@@ -85,13 +97,23 @@ async fn main() -> Result<()> {
     
     // Load message types configuration
     let config_path = env::var("CONFIG_PATH").unwrap_or_else(|_| "message_types.toml".to_string());
-    let message_types = load_message_types(&config_path)
+    let (message_types, regex_cache) = load_message_types(&config_path)
         .context("Failed to load message types configuration")?;
+
+    // Create indices for all message types at startup
+    println!("Creating indices for all message types...");
+    for message_type in message_types.values() {
+        match create_logs_index(&message_type.index_name, &client).await {
+            Ok(result) => println!("Index creation result for '{}': {}", message_type.name, result),
+            Err(e) => eprintln!("Failed to create index for '{}': {}", message_type.name, e),
+        }
+    }
 
     let state = web::Data::new(AppState {
         client: client.clone(),
         host_id: Uuid::new_v4(),
         message_types,
+        regex_cache,
     });
 
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
@@ -110,36 +132,36 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn load_message_types(config_path: &str) -> Result<HashMap<String, MessageTypeConfig>> {
+fn load_message_types(config_path: &str) -> Result<(HashMap<String, MessageTypeConfig>, HashMap<String, Arc<Regex>>)> {
     let content = fs::read_to_string(config_path)?;
     let config_file: ConfigFile = toml::from_str(&content)?;
     
     let mut types = HashMap::new();
+    let mut regex_cache = HashMap::new();
+    
     for message_type in config_file.message_types {
+        let regex = Regex::new(&message_type.regex_pattern)
+            .context(format!("Failed to compile regex for message type '{}': {}", message_type.name, message_type.regex_pattern))?;
+        
+        regex_cache.insert(message_type.name.clone(), Arc::new(regex));
         types.insert(message_type.name.clone(), message_type);
     }
     
-    Ok(types)
+    Ok((types, regex_cache))
 }
 
-fn parse_csv_to_json(csv_line: &str, config: &MessageTypeConfig) -> Result<serde_json::Value> {
-    let fields: Vec<&str> = csv_line.split(',').collect();
-    let field_names: Vec<String> = config.fields.keys().cloned().collect();
-    
-    if fields.len() != field_names.len() {
-        return Err(anyhow::anyhow!(
-            "CSV field count ({}) doesn't match configuration field count ({})", 
-            fields.len(), 
-            field_names.len()
-        ));
-    }
+fn parse_csv_with_regex(csv_line: &str, config: &MessageTypeConfig, regex: &Regex) -> Result<serde_json::Value> {
+    let captures = regex.captures(csv_line)
+        .ok_or_else(|| anyhow::anyhow!("CSV line doesn't match regex pattern: {}", csv_line))?;
 
     let mut json_obj = serde_json::Map::new();
     
-    for (i, field_name) in field_names.iter().enumerate() {
-        if let Some(field_config) = config.fields.get(field_name) {
-            let field_value = parse_field_value(fields[i], field_config)?;
+    for (field_name, field_config) in &config.fields {
+        if let Some(captured_value) = captures.name(field_name) {
+            let field_value = parse_field_value(captured_value.as_str(), field_config)?;
             json_obj.insert(field_name.clone(), field_value);
+        } else {
+            return Err(anyhow::anyhow!("Field '{}' not found in regex captures", field_name));
         }
     }
     
