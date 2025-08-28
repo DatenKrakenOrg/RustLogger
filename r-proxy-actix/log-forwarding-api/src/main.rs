@@ -103,7 +103,7 @@ async fn main() -> Result<()> {
     // Create indices for all message types at startup
     println!("Creating indices for all message types...");
     for message_type in message_types.values() {
-        match create_logs_index(&message_type.index_name, &client).await {
+        match create_logs_index(&message_type.index_name, &client, &message_type.fields).await {
             Ok(result) => println!("Index creation result for '{}': {}", message_type.name, result),
             Err(e) => eprintln!("Failed to create index for '{}': {}", message_type.name, e),
         }
@@ -116,7 +116,7 @@ async fn main() -> Result<()> {
         regex_cache,
     });
 
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("warn"));
     HttpServer::new(move || {
         App::new()
             .app_data(state.clone())
@@ -152,15 +152,27 @@ fn load_message_types(config_path: &str) -> Result<(HashMap<String, MessageTypeC
 
 fn parse_csv_with_regex(csv_line: &str, config: &MessageTypeConfig, regex: &Regex) -> Result<serde_json::Value> {
     let captures = regex.captures(csv_line)
-        .ok_or_else(|| anyhow::anyhow!("CSV line doesn't match regex pattern: {}", csv_line))?;
+        .ok_or_else(|| {
+            println!("ERROR: Regex match failed for message type '{}' with line: '{}'", config.name, csv_line);
+            println!("ERROR: Regex pattern was: '{}'", config.regex_pattern);
+            anyhow::anyhow!("CSV line doesn't match regex pattern for message type '{}': {}", config.name, csv_line)
+        })?;
 
     let mut json_obj = serde_json::Map::new();
     
     for (field_name, field_config) in &config.fields {
         if let Some(captured_value) = captures.name(field_name) {
-            let field_value = parse_field_value(captured_value.as_str(), field_config)?;
-            json_obj.insert(field_name.clone(), field_value);
+            match parse_field_value(captured_value.as_str(), field_config) {
+                Ok(field_value) => {
+                    json_obj.insert(field_name.clone(), field_value);
+                },
+                Err(e) => {
+                    eprintln!("ERROR: Failed to parse field '{}' with value '{}': {}", field_name, captured_value.as_str(), e);
+                    return Err(e);
+                }
+            }
         } else {
+            eprintln!("ERROR: Field '{}' not found in regex captures for message type '{}'", field_name, config.name);
             return Err(anyhow::anyhow!("Field '{}' not found in regex captures", field_name));
         }
     }

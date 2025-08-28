@@ -8,6 +8,9 @@ use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use rand::prelude::*;
 use std::{env, f64};
+use std::{sync::Arc, thread};
+use futures::stream::{self, StreamExt};
+use tokio::task;
 
 /// Configuration for the log sender application.
 ///
@@ -77,41 +80,62 @@ impl Config {
     }
 }
 
-
-
 /// Main application entry point.
 ///
 /// Loads configuration and either runs endlessly or for a specified number of repetitions,
 /// processing the log file each time.
 #[tokio::main]
 async fn main() {
-    let config = Config::load().expect("Failed to load environment variables");
+    let config = Arc::new(Config::load().expect("Failed to load environment variables"));
     
     // Load message types configuration
     let message_config = load_message_types(&config.config_path)
         .expect("Failed to load message types configuration");
     
     // Randomly select a message type
-    let selected_type = select_random_message_type(&message_config)
-        .expect("No message types available");
+    let csv_files = find_matching_csv_files(&config.logs_directory, &message_config);
     
-    println!("Selected message type: {} - {}", selected_type.name, selected_type.description);
-    
-    // Look for CSV file of that type
-    let csv_file_path = PathBuf::from(&config.logs_directory).join(format!("{}.csv", selected_type.name));
-    
-    if !csv_file_path.exists() {
-        eprintln!("CSV file not found: {}", csv_file_path.display());
+    if csv_files.is_empty() {
+        println!("No matching CSV files found in {}", config.logs_directory);
         std::process::exit(1);
     }
 
-    if config.endless {
-        loop {
-            process_file(&config, &selected_type, &csv_file_path).await;
+    // Spawn threads for each CSV file
+    let mut handles = Vec::new();
+
+    for (csv_path, message_type) in csv_files {
+        let config_clone = Arc::clone(&config);
+        let message_type_clone = message_type.clone();
+        let csv_path_clone = csv_path.clone();
+
+        let handle = task::spawn(async move {
+            println!("Starting thread for: {} ({})", csv_path_clone.display(), message_type_clone.name);
+
+            if config_clone.endless {
+                loop {
+                    process_file(&config_clone, &message_type_clone, &csv_path_clone).await;
+                }
+            } else {
+                for _n in 0..config_clone.repetitions {
+                    process_file(&config_clone, &message_type_clone, &csv_path_clone).await;
+                }
+            }
+        });
+
+        handles.push(handle);
+    }
+
+    // Wait for all threads to complete (only relevant if not endless)
+    if !config.endless {
+        for handle in handles {
+            if let Err(e) = handle.await {
+                eprintln!("Thread panicked: {:?}", e);
+            }
         }
     } else {
-        for _n in 0..config.repetitions {
-            process_file(&config, &selected_type, &csv_file_path).await;
+        // For endless mode, wait indefinitely
+        for handle in handles {
+            let _ = handle.await;
         }
     }
 }
@@ -122,9 +146,18 @@ fn load_message_types(config_path: &str) -> Result<Vec<MessageTypeConfig>, Box<d
     Ok(config_file.message_types)
 }
 
-fn select_random_message_type(message_types: &[MessageTypeConfig]) -> Option<MessageTypeConfig> {
-    let mut rng = rand::rng();
-    message_types.choose(&mut rng).cloned()
+fn find_matching_csv_files(logs_directory: &str, message_types: &[MessageTypeConfig]) -> Vec<(PathBuf, MessageTypeConfig)> {
+    let mut csv_files = Vec::new();
+
+    for message_type in message_types {
+        let csv_file_path = PathBuf::from(logs_directory).join(format!("{}.csv", message_type.name));
+
+        if csv_file_path.exists() {
+            csv_files.push((csv_file_path, message_type.clone()));
+        }
+    }
+
+    csv_files
 }
 
 /// Processes the entire log file by reading each line and sending it to the endpoint.
@@ -138,14 +171,34 @@ async fn process_file(config: &Config, message_type: &MessageTypeConfig, csv_fil
     let client = reqwest::Client::new();
     let mut lines = read_lines(csv_file_path).unwrap();
     lines.next(); // Skip header
-    
-    for line in lines.map_while(Result::ok) {
-        send_log(&client, &config.endpoint,&config.secret, &message_type.name, line)
-            .await
-            .expect("Failed to establish a connection")
-    }
-}
 
+    // Collect all lines into a vector for parallel processing
+    let all_lines: Vec<String> = lines.map_while(Result::ok).collect();
+
+    // Create futures for all HTTP requests
+    let requests = all_lines.into_iter().map(|line| {
+        let client = &client;
+        let endpoint = &config.endpoint;
+        let secret = &config.secret;
+        let message_type_name = &message_type.name;
+
+        async move {
+            send_log(client, endpoint, secret, message_type_name, line).await
+        }
+    });
+
+    // Process all requests with maximum concurrency
+    // Adjust the number (50) based on your API's capacity
+    let results: Vec<_> = stream::iter(requests)
+        .buffer_unordered(1000)  // Process 50 requests concurrently
+        .collect()
+        .await;
+
+    // Count successes/failures
+    let (successes, failures): (Vec<_>, Vec<_>) = results.into_iter().partition(Result::is_ok);
+    println!("File {}: {} successes, {} failures",
+             csv_file_path.display(), successes.len(), failures.len());
+}
 /// Reads lines from a file and returns an iterator over them.
 ///
 /// # Arguments
@@ -179,7 +232,7 @@ async fn send_log(
     message_type: &str, 
     csv_line: String
 ) -> Result<(), Error> {
-    println!("Sending {} log: {}", message_type, csv_line);
+    //println!("Sending {} log: {}", message_type, csv_line);
 
     let payload = LogPayload {
         message_type: message_type.to_string(),
@@ -188,7 +241,11 @@ async fn send_log(
 
     let res = client.post(endpoint).header("X-Api-Key", secret).json(&payload).send().await?;
 
-    println!("Response: {}", res.status());
+    if res.status() != 200 {
+        println!("Response: {}", res.status());
+    }
+
+    //println!("Response: {}", res.status());
 
     match res.error_for_status() {
         Ok(_) => (),

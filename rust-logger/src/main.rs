@@ -40,7 +40,7 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    
+
     let config = MessageTypesConfig::load_from_file(&PathBuf::from(&args.config_path))
         .expect("Failed to load message types configuration");
 
@@ -90,6 +90,7 @@ fn save_logs_to_csv(
     
     // Write header
     let header = field_order.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(",");
+    println!("{}", header);
     writeln!(file, "{}", header)?;
     
     // Write data rows

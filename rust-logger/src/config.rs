@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::fs;
 use std::path::Path;
 
@@ -8,7 +9,7 @@ pub struct MessageTypeConfig {
     pub name: String,
     pub index_name: String,
     pub description: String,
-    pub fields: HashMap<String, FieldConfig>,
+    pub fields: IndexMap<String, FieldConfig>,
     pub logic: Option<HashMap<String, toml::Value>>,
 }
 

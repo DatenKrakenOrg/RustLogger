@@ -10,9 +10,10 @@ use elasticsearch::{
 };
 //use env_logger::builder;
 use serde_json::{Value, json};
-use std::env;
+use std::{env, collections::HashMap};
 use url::Url;
 use std::result::Result::Ok as ResultOk;
+use toml;
 
 /// Creates a elastic search client
 ///
@@ -57,8 +58,8 @@ pub fn create_client() -> Result<Elasticsearch> {
 ///    .await
 ///    .context("Failed to call create_logs_index function")?;
 /// ```
-pub async fn create_logs_index(index_name: &str, connector: &Elasticsearch) -> Result<String> {
-    let mapping = create_log_mapping();
+pub async fn create_logs_index(index_name: &str, connector: &Elasticsearch, fields: &HashMap<String, toml::Value>) -> Result<String> {
+    let mapping = create_dynamic_mapping(fields);
 
     // Get index settings from environment variables with defaults
     let replicas: u32 = env::var("ELASTIC_INDEX_REPLICAS")
@@ -83,24 +84,34 @@ pub async fn create_logs_index(index_name: &str, connector: &Elasticsearch) -> R
         return Ok(format!("Index '{}' already exists", index_name));
     }
 
+    let index_body = json!({
+        "settings": {
+            "number_of_replicas": replicas,
+            "number_of_shards": shards
+        },
+        "mappings": mapping
+    });
+    
     //If not create one with a mapping matching the log
     let response = connector
         .indices()
         .create(IndicesCreateParts::Index(index_name))
-        .body(json!({
-            "settings": {
-                "number_of_replicas": replicas,
-                "number_of_shards": shards
-            },
-            "mappings": mapping
-        }))
+        .body(index_body)
         .send()
         .await
         .context("Index creation attempt failed")?;
 
-    response
-        .error_for_status_code()
-        .context("Failed to insert log entry")?;
+    let status_code = response.status_code();
+    
+    if !status_code.is_success() {
+        // Get the response body for detailed error information
+        let error_text = response.text().await.unwrap_or_else(|_| "Failed to get error text".to_string());
+        println!("ERROR: Index creation failed for '{}'. Status: {}. Response: {}",  index_name, status_code, error_text);
+        return Err(anyhow::anyhow!("Failed to create index '{}': Status: {}, Error: {}", index_name, status_code, error_text));
+    }
+    
+    // If we get here, the request was successful
+    let _result = response.error_for_status_code().context("Index creation validation failed")?;
 
     Ok(format!("Index '{}' created successfully", index_name))
 }
@@ -145,25 +156,39 @@ pub async fn get_nodes(client: &Elasticsearch) -> Result<String> {
     }
 }
 
-/// Creates a log mapping. This is needed in order to create a index in elastic search. It's format matches the logs.
-fn create_log_mapping() -> Value {
-    json!({
-        "properties": {
-            "timestamp": {
+/// Creates a dynamic mapping based on message type fields configuration
+fn create_dynamic_mapping(fields: &std::collections::HashMap<String, toml::Value>) -> Value {
+    let mut properties = serde_json::Map::new();
+    
+    for (field_name, field_config) in fields {
+        
+        let field_type_str = field_config.get("type").and_then(|v| v.as_str());
+        
+        let field_type = match field_type_str {
+            Some("datetime") => json!({
                 "type": "date",
-                // RFC3339/ISO-8601 format => Parseable by chrono
                 "format": "strict_date_optional_time||epoch_millis"
+            }),
+            Some("string") | Some("enum") | Some("uuid") => json!({
+                "type": "keyword"
+            }),
+            Some("float") => json!({
+                "type": "float"
+            }),
+            Some("integer") => json!({
+                "type": "long"
+            }),
+            _ => {
+                println!("DEBUG: Field '{}' using fallback type 'keyword' for type: {:?}", field_name, field_type_str);
+                json!({
+                    "type": "keyword"
+                })
             },
-            "level": { "type": "keyword" },
-            "temperature": { "type": "float" },
-            "humidity": { "type": "float" },
-            "msg": {
-                "properties": {
-                    "device": { "type": "keyword" },
-                    "msg": { "type": "text", "analyzer": "standard" },
-                    "exceeded_values": { "type": "boolean" }
-                }
-            }
-        }
-    })
+        };
+        
+        properties.insert(field_name.clone(), field_type);
+    }
+    
+    let mapping = json!({"properties": properties});
+    mapping
 }

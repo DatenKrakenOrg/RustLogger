@@ -1,6 +1,6 @@
 [[message_types]]
 name = "iot_sensor"
-index_name = "logs-iot-sensors"
+index_name = "iot-sensor-logs"
 description = "IoT sensor readings with environmental data"
 regex_pattern = "^(?P<timestamp>[^,]+),(?P<level>[^,]+),(?P<temperature>[^,]+),(?P<humidity>[^,]+),(?P<device_id>[^,]+),(?P<location>[^,]+)$"
 
@@ -20,7 +20,7 @@ warn_humidity_threshold = 0.6
 
 [[message_types]]
 name = "system_metrics"
-index_name = "logs-system-metrics"
+index_name = "system-metrics-logs"
 description = "System performance monitoring"
 regex_pattern = "^(?P<timestamp>[^,]+),(?P<level>[^,]+),(?P<cpu_usage>[^,]+),(?P<memory_usage>[^,]+),(?P<disk_usage>[^,]+),(?P<hostname>[^,]+),(?P<service>[^,]+)$"
 
@@ -41,7 +41,7 @@ warn_memory_threshold = 80.0
 
 [[message_types]]
 name = "timescaledb"
-index_name = "logs-timescaledb"
+index_name = "timescaledb-logs"
 description = "TimescaleDB database operations and performance"
 regex_pattern = "^(?P<timestamp>[^,]+),(?P<level>[^,]+),(?P<query_duration>[^,]+),(?P<rows_affected>[^,]+),(?P<connection_count>[^,]+),(?P<database_name>[^,]+),(?P<operation>[^,]+),(?P<table_name>[^,]+),(?P<chunk_id>[^,]+)$"
 
@@ -64,7 +64,7 @@ vacuum_duration_multiplier = 5.0
 
 [[message_types]]
 name = "kafka"
-index_name = "logs-kafka"
+index_name = "kafka-logs"
 description = "Apache Kafka broker and consumer logs"
 regex_pattern = "^(?P<timestamp>[^,]+),(?P<level>[^,]+),(?P<topic>[^,]+),(?P<partition>[^,]+),(?P<offset>[^,]+),(?P<lag>[^,]+),(?P<broker_id>[^,]+),(?P<consumer_group>[^,]+),(?P<throughput>[^,]+),(?P<batch_size>[^,]+)$"
 
@@ -88,7 +88,7 @@ rebalance_events = ["consumer_join", "consumer_leave"]
 
 [[message_types]]
 name = "application_logs"
-index_name = "logs-application"
+index_name = "application-logs"
 description = "Application runtime logs"
 regex_pattern = "^(?P<timestamp>[^,]+),(?P<level>[^,]+),(?P<user_id>[^,]+),(?P<session_id>[^,]+),(?P<endpoint>[^,]+),(?P<response_time>[^,]+),(?P<status_code>[^,]+)$"
 
