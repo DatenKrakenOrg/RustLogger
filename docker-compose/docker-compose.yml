@@ -365,12 +365,12 @@ services:
     build:
       context: ../log_sender/
       dockerfile: Dockerfile
-    container_name: log-sender
+    #container_name: log-sender
     env_file: .env
     depends_on:
       log-forwarding-lb:
         condition: service_healthy
-      log_gen:
+      log-gen:
         condition: service_completed_successfully
     volumes:
       - logs:/etc/logs
