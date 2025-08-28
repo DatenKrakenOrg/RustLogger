@@ -53,12 +53,16 @@ services:
     build:
       context: ../r-proxy-actix/nginx
       dockerfile: Dockerfile
+    volumes:
+      - ../r-proxy-actix/nginx/nginx.template:/etc/nginx/conf.d/nginx.template
     container_name: log-forwarding-lb
     ports:
       - 8080:80
+    env_file: .env
     networks:
       - logger-network
     restart: unless-stopped
+    command: /bin/ash -c "envsubst '$${SECRET_API_KEY}' < /etc/nginx/conf.d/nginx.template > /etc/nginx/conf.d/default.conf && cat /etc/nginx/conf.d/default.conf && nginx -g' daemon off;'"
     depends_on:
       log-forwarding-api-3:
         condition: service_healthy
