@@ -1,55 +1,50 @@
-# syntax=docker/dockerfile:1
-
-# Comments are provided throughout this file to help you get started.
-# If you need more help, visit the Dockerfile reference guide at
-# https://docs.docker.com/go/dockerfile-reference/
-
-# Want to help us make this template better? Share your feedback here: https://forms.gle/ybq9Krt8jtBL3iCk7
-
-ARG RUST_VERSION=1.89.0
+ARG RUST_VERSION=latest
 ARG APP_NAME=rust-logger
 
-################################################################################
-# Create a stage for building the application.
-
-FROM rust:${RUST_VERSION}-alpine AS build
+FROM rust:${RUST_VERSION} AS builder
 ARG APP_NAME
-WORKDIR /app
+WORKDIR /code
 
 # Install host build dependencies.
-RUN apk add --no-cache clang lld musl-dev git
+RUN apt-get update && apt-get install -y libssl-dev
 
-# Build the application.
-# Leverage a cache mount to /usr/local/cargo/registry/
-# for downloaded dependencies, a cache mount to /usr/local/cargo/git/db
-# for git repository dependencies, and a cache mount to /app/target/ for
-# compiled dependencies which will speed up subsequent builds.
-# Leverage a bind mount to the src directory to avoid having to copy the
-# source code into the container. Once built, copy the executable to an
-# output directory before the cache mounted /app/target is unmounted.
-RUN --mount=type=bind,source=src,target=src \
-    --mount=type=bind,source=Cargo.toml,target=Cargo.toml \
-    --mount=type=bind,source=Cargo.lock,target=Cargo.lock \
-    --mount=type=cache,target=/app/target/ \
-    --mount=type=cache,target=/usr/local/cargo/git/db \
-    --mount=type=cache,target=/usr/local/cargo/registry/ \
-cargo build --locked --release && \
-cp ./target/release/$APP_NAME /bin/log_gen
+# fetch all dependencies and cache it for further builds
+RUN cargo init
 
-################################################################################
-# Create a new stage for running the application that contains the minimal
-# runtime dependencies for the application. This often uses a different base
-# image from the build stage where the necessary files are copied from the build
-# stage.
-#
-# The example below uses the alpine image as the foundation for running the app.
-# By specifying the "3.18" tag, it will use version 3.18 of alpine. If
-# reproducibility is important, consider using a digest
-# (e.g., alpine@sha256:664888ac9cfd28068e062c991ebcff4b4c7307dc8dd4df9e728bedde5c449d91).
-FROM alpine:3.22 AS final
+# Layer Build of defined dependencies
+COPY Cargo.toml Cargo.toml
+COPY Cargo.lock Cargo.lock
+RUN cargo fetch
+# Prebuild libs with cache
+RUN --mount=type=cache,target=/usr/local/cargo/registry cargo build --release
 
-# Copy the executable from the "build" stage.
-COPY --from=build /bin/log_gen /bin/
+# copy actual source code
+COPY src/ src/
+
+# Test and build with cache from above (contains workaround)
+RUN --mount=type=cache,target=/usr/local/cargo/registry <<EOF
+  set -e
+  # update timestamps to force a new build
+  touch /code/src/main.rs
+  #cargo test --release
+  cargo build --release
+EOF
+
+# Actual container
+FROM ubuntu:24.04
+ARG APP_NAME
+# add dependencies for run-container
+RUN apt-get update && apt-get install -y libssl-dev 
+
+WORKDIR /app
+
+COPY --from=builder /code/target/release/${APP_NAME} ${APP_NAME}
+
+RUN useradd -ms /bin/bash rust-log-user
+RUN mkdir /etc/logs
+RUN chown -R rust-log-user:rust-log-user /etc/logs
+USER rust-log-user
 
 # What the container should run when it is started.
-CMD ["/bin/log_gen" ,"-p","/etc/logs/logs.csv"]
+
+CMD ["/app/rust-logger" ,"-p","/etc/logs/logs.csv"]
