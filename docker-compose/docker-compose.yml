@@ -374,7 +374,7 @@ services:
 
   log-sender:
     build:
-      context: ../log_sender/
+      context: ../log-sender/
       dockerfile: Dockerfile
     #container_name: log-sender
     env_file: .env
