@@ -1,0 +1,3 @@
+timestamp,level,temperature,humidity,device_id,location
+2025-04-04T03:49:29.000Z,WARN,26.830873578788378,0.16876120483710677,sensor_003,greenhouse
+2025-06-29T19:12:23.000Z,WARN,26.276171451439403,0.2266371618197467,sensor_002,warehouse

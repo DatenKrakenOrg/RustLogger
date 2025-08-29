@@ -1,14 +1,12 @@
 mod config;
 mod message_generator;
-mod log_collector;
-mod log_generator;
-mod logging_types;
 mod utility;
 use clap::Parser;
 use config::{MessageTypesConfig, FieldValue};
 use message_generator::MessageGenerator;
 
-use std::{fs::File, path::PathBuf, collections::HashMap};
+use std::{path::PathBuf, collections::HashMap};
+use polars::prelude::*;
 use utility::default_path;
 
 /// CLI Arguments to Parse via clap refer to documentation of clap for more information.
@@ -38,36 +36,48 @@ struct Args {
     config_path: String,
 }
 
+/// Main entry point of the application.
+/// Parses command line arguments, loads configuration, and generates log data
+/// for the specified message types, saving each type to its own CSV file.
 fn main() {
+    // Parse command line arguments
     let args = Args::parse();
 
+    // Load message type configuration from TOML file
     let config = MessageTypesConfig::load_from_file(&PathBuf::from(&args.config_path))
         .expect("Failed to load message types configuration");
 
+    // Determine which message types to generate:
+    // Either from command line argument (comma-separated) or all available types
     let selected_types: Vec<String> = if let Some(types_str) = &args.types {
         types_str.split(',').map(|s| s.trim().to_string()).collect()
     } else {
         config.list_types().into_iter().cloned().collect()
     };
 
+    // Determine the output directory for CSV files
     let base_path = PathBuf::from(&args.path);
     let default_dir = PathBuf::from(".");
     let parent_dir = base_path.parent().unwrap_or(&default_dir);
 
+    // Generate logs for each selected message type
     for message_type in &selected_types {
         if let Some(type_config) = config.get_type(message_type) {
             println!("Generating {} logs for message type: {}", args.count, message_type);
             
+            // Create a message generator for this specific type
             let mut generator = MessageGenerator::new(
                 type_config.clone(), 
                 (args.start_year, args.end_year)
             ).expect("Failed to create message generator");
 
+            // Generate the specified number of log messages
             let mut logs = Vec::new();
             for _ in 0..args.count {
                 logs.push(generator.generate_message());
             }
 
+            // Save generated logs to CSV file named after the message type
             let file_path = parent_dir.join(format!("{}.csv", message_type));
             save_logs_to_csv(&logs, &file_path, type_config.fields.keys().collect())
                 .expect("Failed to save logs to CSV");
@@ -79,32 +89,56 @@ fn main() {
     }
 }
 
+/// Saves log data to a CSV file using Polars DataFrame.
+/// 
+/// # Arguments
+/// * `logs` - Vector of log entries as HashMaps with field names and values
+/// * `file_path` - Path where the CSV file should be saved
+/// * `field_order` - Order in which fields should appear as columns in the CSV
+/// 
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error>>` - Success or error details
 fn save_logs_to_csv(
     logs: &[HashMap<String, FieldValue>], 
     file_path: &PathBuf, 
     field_order: Vec<&String>
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut file = File::create(file_path)?;
-    
-    use std::io::Write;
-    
-    // Write header
+    // Early return if no logs to process
+    if logs.is_empty() {
+        return Ok(());
+    }
+
+    // Print header for console output
     let header = field_order.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(",");
     println!("{}", header);
-    writeln!(file, "{}", header)?;
-    
-    // Write data rows
-    for log in logs {
-        let row: Vec<String> = field_order
+
+    // Create columns for DataFrame
+    let mut columns: Vec<Column> = Vec::new();
+
+    // Create a Polars Series for each field in the specified order
+    for field_name in &field_order {
+        // Extract values for this field from all log entries
+        let values: Vec<String> = logs
             .iter()
-            .map(|field| {
-                log.get(*field)
+            .map(|log| {
+                log.get(*field_name)
                     .map(|v| v.to_csv_string())
                     .unwrap_or_else(|| "".to_string())
             })
             .collect();
-        writeln!(file, "{}", row.join(","))?;
+
+        // Create a Series (column) and add to the columns vector
+        let series = Series::new((*field_name).into(), values);
+        columns.push(series.into());
     }
+
+    // Create DataFrame from columns and write to CSV file
+    let df = DataFrame::new(columns)?;
+    
+    let mut file = std::fs::File::create(file_path)?;
+    CsvWriter::new(&mut file)
+        .include_header(true)
+        .finish(&mut df.clone())?;
     
     Ok(())
 }

@@ -1,0 +1,3 @@
+timestamp,level,user_id,session_id,endpoint,response_time,status_code
+2025-09-14T09:29:39.000Z,ERROR,user_9996,c302a90f-68a7-401e-9cb5-30a6e3048c79,/api/login,3797.8098989038917,503
+2025-03-06T14:06:19.000Z,ERROR,user_7775,c6888cce-2b9c-4947-8977-5019b8ac9c74,/api/orders,1311.4737929912735,503
