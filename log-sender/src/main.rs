@@ -6,7 +6,6 @@ use std::fs::{self, File};
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
-use rand::prelude::*;
 use std::{env, f64};
 use std::{sync::Arc, thread};
 use futures::stream::{self, StreamExt};
@@ -26,6 +25,7 @@ struct Config {
     endpoint: String,
     secret: String,
     config_path: String,
+    process_amount: usize,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -76,6 +76,10 @@ impl Config {
                 .map_err(|_| "SECRET_API_KEY environment variable is missing")?,
             config_path: env::var("CONFIG_PATH")
                 .unwrap_or_else(|_| "message_types.toml".to_string()),
+            process_amount: env::var("PROCESS_AMOUNT")
+                .map_err(|_| "PROCESS_AMOUNT environment variable is missing")?
+                .parse()
+                .map_err(|_| "PROCESS_AMOUNT must be an usize")?,
         })
     }
 }
@@ -170,7 +174,7 @@ fn find_matching_csv_files(logs_directory: &str, message_types: &[MessageTypeCon
 async fn process_file(config: &Config, message_type: &MessageTypeConfig, csv_file_path: &PathBuf) {
     let client = reqwest::Client::new();
     let mut lines = read_lines(csv_file_path).unwrap();
-    lines.next(); // Skip header
+    lines.next(); // Skip header    
 
     // Collect all lines into a vector for parallel processing
     let all_lines: Vec<String> = lines.map_while(Result::ok).collect();
@@ -190,7 +194,7 @@ async fn process_file(config: &Config, message_type: &MessageTypeConfig, csv_fil
     // Process all requests with maximum concurrency
     // Adjust the number (50) based on your API's capacity
     let results: Vec<_> = stream::iter(requests)
-        .buffer_unordered(1000)  // Process 50 requests concurrently
+        .buffer_unordered(config.process_amount) 
         .collect()
         .await;
 
