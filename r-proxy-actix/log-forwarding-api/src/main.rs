@@ -1,16 +1,18 @@
 mod elastic;
 mod serializable_objects;
+mod server_error;
 use actix_web::{
     App, HttpResponse, HttpServer, Result as ActixResult, error::ErrorInternalServerError, get,
-    middleware::Logger, post, web,
+    http::StatusCode, middleware::Logger, post, web,
 };
-use anyhow::{Context, Result};
 use dotenvy::dotenv;
-use elastic::{create_client, create_logs_index, send_document, get_nodes};
+use elastic::{create_client, create_logs_index, get_nodes, send_document};
 use elasticsearch::Elasticsearch;
 use serializable_objects::LogEntry;
 use std::env;
 use uuid::Uuid;
+
+use crate::server_error::ServerError;
 
 struct AppState {
     client: Elasticsearch,
@@ -52,18 +54,22 @@ async fn elastic_node_info(data: web::Data<AppState>) -> ActixResult<HttpRespons
 }
 
 #[actix_web::main]
-async fn main() -> Result<()> {
+async fn main() -> std::io::Result<()> {
     // Set DEPLOYMENT=PROD in docker compose!
     if env::var("DEPLOYMENT").unwrap_or_default() != "PROD" {
         dotenv().ok();
     }
-    let client: Elasticsearch = create_client().context("Failed to create elasticsearch client")?;
-    let index_name: String = env::var("INDEX_NAME").context("INDEX_NAME not set")?;
+    let client: Elasticsearch = create_client().unwrap();
+    let index_name: String = env::var("INDEX_NAME")
+        .map_err(|_| ServerError {
+            code: StatusCode::INTERNAL_SERVER_ERROR,
+            message: String::from("INDEX_NAME not set during startup"),
+            additional_information: String::from("Set ELASTIC_USERNAME in .env / env variables!"),
+        })
+        .unwrap();
 
     // Creates a index if missing, otherwise returns
-    create_logs_index(&index_name, &client)
-        .await
-        .context("Failed to call create_logs_index function")?;
+    create_logs_index(&index_name, &client).await.unwrap();
 
     let state = web::Data::new(AppState {
         client: client.clone(),
