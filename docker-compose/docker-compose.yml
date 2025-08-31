@@ -34,6 +34,11 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://container-log-collector:5050"
+        tag: "haproxy"
 
   metricbeat:
     image: docker.elastic.co/beats/metricbeat:8.19.0
@@ -72,6 +77,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://container-log-collector:5050"
+        tag: "log-forwarding-lb"
 
   log-forwarding-api-1:
     build:
@@ -93,6 +103,11 @@ services:
     depends_on:
       haproxy:
         condition: service_healthy
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://container-log-collector:5050"
+        tag: "log-forwarding-api-1"
 
   log-forwarding-api-2:
     build:
@@ -114,6 +129,11 @@ services:
     depends_on:
       log-forwarding-api-1:
           condition: service_healthy
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://container-log-collector:5050"
+        tag: "log-forwarding-api-2"
 
   log-forwarding-api-3:
     build:
@@ -135,6 +155,11 @@ services:
     depends_on:
       log-forwarding-api-1:
           condition: service_healthy
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://container-log-collector:5050"
+        tag: "log-forwarding-api-3"
 
   # elastic-stack
   elasticsetup:
@@ -372,6 +397,34 @@ services:
     networks:
       - logger-network
 
+  container-log-collector:
+    build:
+      context: ../container-log-collector/
+      dockerfile: Dockerfile
+    container_name: container-log-collector
+    env_file: .env
+    environment:
+      - API_URL=http://log-forwarding-lb:80
+      - BUFFER_DB_PATH=/var/lib/container-collector/buffer.db
+      - MAX_RETRIES=5
+      - RETRY_DELAY_SECS=30
+      - CLEANUP_FAILED_AFTER_HOURS=24
+    ports:
+      - "514:514/udp"
+    volumes:
+      - certs:/usr/share/certs:ro
+      - container-collector-buffer:/var/lib/container-collector
+    networks:
+      - logger-network
+    # No depends_on - starts independently and buffers logs until API is available
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep container-log-collector > /dev/null && ls /var/lib/container-collector/buffer.db > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
   log-sender:
     build:
       context: ../log-sender/
@@ -388,6 +441,11 @@ services:
       - ../message_types.toml:/etc/config/message_types.toml:ro
     networks:
       - logger-network
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://container-log-collector:514"
+        tag: "log-sender"
 
 volumes:
   certs:
@@ -403,4 +461,6 @@ volumes:
   kibanadata:
     driver: local
   logs:
+    driver: local
+  container-collector-buffer:
     driver: local

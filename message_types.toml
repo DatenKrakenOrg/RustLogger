@@ -110,16 +110,18 @@ status_code = { type = "integer", values = ["200", "201", "400", "401", "403", "
 slow_response_threshold = 1000.0
 error_status_codes = [400, 401, 403, 404, 500, 503]
 
-# Example of a message type that can be processed by API but not generated
+# Container logs from syslog messages (Docker/Podman logging driver)
 [[message_types]]
 generate = false
-name = "external_system"
-index_name = "external-system-logs"
-description = "Logs from external systems that we don't generate"
-regex_pattern = "^(?P<timestamp>[^,]+),(?P<level>[^,]+),(?P<source_system>[^,]+),(?P<message>[^,]+)$"
+name = "container_logs"
+index_name = "container-logs"
+description = "Container syslog messages from Docker/Podman logging drivers"
+regex_pattern = "^<(?P<priority>\\d+)>(?P<timestamp>\\w{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2})\\s+(?P<hostname>\\S+)\\s+(?P<container_name>\\S+?)(?:\\[(?P<process_id>\\d*)\\])?:?\\s*(?P<message>.*)$"
 
 [message_types.fields]
-timestamp = { type = "datetime" }
-level = { type = "enum", values = ["INFO", "WARN", "ERROR"] }
-source_system = { type = "string" }
+priority = { type = "integer" }
+timestamp = { type = "string" }
+hostname = { type = "string" }
+container_name = { type = "string" }
+process_id = { type = "string" }
 message = { type = "string" }
