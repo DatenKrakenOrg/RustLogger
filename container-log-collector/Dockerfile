@@ -34,7 +34,7 @@ EOF
 FROM bitnami/minideb:bookworm
 
 # add dependencies for run-container
-RUN apt-get update && apt-get install -y libssl-dev
+RUN apt-get update && apt-get install -y libssl-dev netcat-openbsd
 
 WORKDIR /app
 

@@ -2,7 +2,6 @@ mod config;
 mod syslog_server;
 mod api_client;
 mod log_forwarder;
-mod buffer_db;
 
 use anyhow::Result;
 use clap::Parser;
@@ -26,31 +25,31 @@ async fn main() -> Result<()> {
     env_logger::init();
     let args = Args::parse();
     
-    log::info!("Starting Container Log Collector");
+    println!("Starting Container Log Collector");
     
     let config = Arc::new(Config::load(&args.config)?);
-    log::info!("Configuration loaded from: {}", args.config);
+    println!("Configuration loaded from: {}", args.config);
     
-    let api_client = Arc::new(ApiClient::new(&config).await?);
-    log::info!("Connected to log-forwarding-api at: {}", config.api_url);
+    // Try to create API client but don't fail if it's unavailable at startup
+    let api_client = ApiClient::new(&config).await?;
     
-    let log_forwarder = Arc::new(LogForwarder::new(config.clone(), api_client.clone()).await?);
+    let log_forwarder = Arc::new(LogForwarder::new(config.clone(), Arc::new(api_client).clone()).await?);
     
     let syslog_server = SyslogServer::new(config.clone(), log_forwarder);
     
-    log::info!("Starting syslog server on {}:{}", config.bind_address, config.syslog_port);
+    println!("Starting syslog server on {}:{}", config.bind_address, config.syslog_port);
     
     tokio::select! {
         result = syslog_server.run() => {
             if let Err(e) = result {
-                log::error!("Syslog server error: {}", e);
+                println!("Syslog server error: {}", e);
             }
         }
         _ = signal::ctrl_c() => {
-            log::info!("Received shutdown signal, stopping server...");
+            println!("Received shutdown signal, stopping server...");
         }
     }
     
-    log::info!("Container Log Collector stopped");
+    println!("Container Log Collector stopped");
     Ok(())
 }

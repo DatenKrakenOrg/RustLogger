@@ -151,7 +151,7 @@ fn load_message_types(config_path: &str) -> Result<(HashMap<String, MessageTypeC
 }
 
 fn parse_csv_with_regex(csv_line: &str, config: &MessageTypeConfig, regex: &Regex) -> Result<serde_json::Value> {
-    let captures = regex.captures(csv_line)
+    let captures = regex.captures(csv_line.trim())
         .ok_or_else(|| {
             println!("ERROR: Regex match failed for message type '{}' with line: '{}'", config.name, csv_line);
             println!("ERROR: Regex pattern was: '{}'", config.regex_pattern);

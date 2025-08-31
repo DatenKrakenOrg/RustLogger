@@ -115,13 +115,12 @@ error_status_codes = [400, 401, 403, 404, 500, 503]
 generate = false
 name = "container_logs"
 index_name = "container-logs"
-description = "Container syslog messages from Docker/Podman logging drivers"
-regex_pattern = "^<(?P<priority>\\d+)>(?P<timestamp>\\w{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2})\\s+(?P<hostname>\\S+)\\s+(?P<container_name>\\S+?)(?:\\[(?P<process_id>\\d*)\\])?:?\\s*(?P<message>.*)$"
+description = "Container syslog messages from Docker logging drivers"
+regex_pattern = '''^<(?P<priority>\d+)>(?P<timestamp>\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(?P<container_name>[^\s\[]+)(?:\[(?P<process_id>\d+)\])?:\s+(?P<message>.*)$'''
 
 [message_types.fields]
 priority = { type = "integer" }
 timestamp = { type = "string" }
-hostname = { type = "string" }
 container_name = { type = "string" }
 process_id = { type = "string" }
 message = { type = "string" }

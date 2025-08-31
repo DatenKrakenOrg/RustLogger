@@ -14,13 +14,18 @@ pub struct Config {
     pub max_retries: i32,
     pub retry_delay_secs: u64,
     pub cleanup_failed_after_hours: i64,
+    pub secret: String,
 }
 
 
 
 impl Config {
-    pub fn load(_config_path: &str) -> Result<Self> {
-        if env::var("DEPLOYMENT").unwrap_or_default() != "PROD" {
+    pub fn load(config_path: &str) -> Result<Self> {
+        // Load the specified config file
+        if std::path::Path::new(config_path).exists() {
+            dotenvy::from_filename(config_path).ok();
+        } else if env::var("DEPLOYMENT").unwrap_or_default() != "PROD" {
+            // Fallback to default .env if config file doesn't exist
             dotenv().ok();
         }
         
@@ -56,6 +61,8 @@ impl Config {
                 .unwrap_or_else(|_| "24".to_string())
                 .parse()
                 .unwrap_or(24),
+            secret: env::var("SECRET_API_KEY")
+                .unwrap_or_else(|_| "123456".to_string()),
         })
     }
 }

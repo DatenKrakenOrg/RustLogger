@@ -1,8 +1,28 @@
 networks:
   logger-network:
     driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: logger-network
 
 services:
+  container-log-collector:
+    build:
+      context: ../container-log-collector/
+      dockerfile: Dockerfile
+    container_name: container-log-collector
+    env_file: .env
+    ports:
+      - "5050:5050/udp"
+    networks:
+      - logger-network
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -u localhost 5050 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
   haproxy:
     build:
       context: ./haproxy/
@@ -17,6 +37,7 @@ services:
     networks:
       - logger-network
     depends_on:
+
       es01:
         condition: service_healthy
       es02:
@@ -37,7 +58,7 @@ services:
     logging:
       driver: syslog
       options:
-        syslog-address: "udp://container-log-collector:5050"
+        syslog-address: "udp://localhost:5050"
         tag: "haproxy"
 
   metricbeat:
@@ -80,7 +101,7 @@ services:
     logging:
       driver: syslog
       options:
-        syslog-address: "udp://container-log-collector:5050"
+        syslog-address: "udp://localhost:5050"
         tag: "log-forwarding-lb"
 
   log-forwarding-api-1:
@@ -106,7 +127,7 @@ services:
     logging:
       driver: syslog
       options:
-        syslog-address: "udp://container-log-collector:5050"
+        syslog-address: "udp://localhost:5050"
         tag: "log-forwarding-api-1"
 
   log-forwarding-api-2:
@@ -132,7 +153,7 @@ services:
     logging:
       driver: syslog
       options:
-        syslog-address: "udp://container-log-collector:5050"
+        syslog-address: "udp://localhost:5050"
         tag: "log-forwarding-api-2"
 
   log-forwarding-api-3:
@@ -158,13 +179,16 @@ services:
     logging:
       driver: syslog
       options:
-        syslog-address: "udp://container-log-collector:5050"
+        syslog-address: "udp://localhost:5050"
         tag: "log-forwarding-api-3"
 
   # elastic-stack
   elasticsetup:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     container_name: elasicsetup
+    depends_on:
+      container-log-collector:
+        condition: service_healthy
     networks:
       - logger-network
     env_file: .env
@@ -385,7 +409,6 @@ services:
       haproxy:
         condition: service_healthy
 
-
   log-gen:
     build:
       context: ../rust-logger/
@@ -396,34 +419,6 @@ services:
       - ../message_types.toml:/etc/config/message_types.toml:ro
     networks:
       - logger-network
-
-  container-log-collector:
-    build:
-      context: ../container-log-collector/
-      dockerfile: Dockerfile
-    container_name: container-log-collector
-    env_file: .env
-    environment:
-      - API_URL=http://log-forwarding-lb:80
-      - BUFFER_DB_PATH=/var/lib/container-collector/buffer.db
-      - MAX_RETRIES=5
-      - RETRY_DELAY_SECS=30
-      - CLEANUP_FAILED_AFTER_HOURS=24
-    ports:
-      - "514:514/udp"
-    volumes:
-      - certs:/usr/share/certs:ro
-      - container-collector-buffer:/var/lib/container-collector
-    networks:
-      - logger-network
-    # No depends_on - starts independently and buffers logs until API is available
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep container-log-collector > /dev/null && ls /var/lib/container-collector/buffer.db > /dev/null || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    restart: unless-stopped
 
   log-sender:
     build:
@@ -444,7 +439,7 @@ services:
     logging:
       driver: syslog
       options:
-        syslog-address: "udp://container-log-collector:514"
+        syslog-address: "udp://localhost:5050"
         tag: "log-sender"
 
 volumes:
@@ -461,6 +456,4 @@ volumes:
   kibanadata:
     driver: local
   logs:
-    driver: local
-  container-collector-buffer:
     driver: local
