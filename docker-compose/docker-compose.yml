@@ -416,7 +416,7 @@ services:
 
   log-gen:
     build:
-      context: ../rust-logger/
+      context: ../log-generator/
       dockerfile: Dockerfile
     container_name: log-gen
     volumes: 
