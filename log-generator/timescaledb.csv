@@ -1,3 +1,0 @@
-timestamp,level,query_duration,rows_affected,connection_count,database_name,operation,table_name,chunk_id
-2025-12-06T04:29:53.000Z,WARN,4138.8509410882625,266370,99,analytics,DELETE,events_table,8702
-2025-09-17T17:25:14.000Z,WARN,7364.130329781954,778562,37,metrics_db,INSERT,sensor_table,2541

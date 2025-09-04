@@ -1,4 +1,0 @@
-timestamp,level,topic,partition,offset,lag,broker_id,consumer_group,throughput,batch_size
-2025-05-23T03:04:29.000Z,ERROR,prod.payments,0,900832,15992,5,payment-handler,8989.228741245988,723
-2025-01-18T11:18:41.000Z,ERROR,dev.events,3,952769,26368,1,analytics-consumer,4023.8726021462644,647
-2025-12-25T02:09:18.000Z,ERROR,prod.orders,9,213692,42582,4,analytics-consumer,566.1287307193294,163

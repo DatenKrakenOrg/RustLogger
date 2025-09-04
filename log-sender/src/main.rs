@@ -6,8 +6,8 @@ use std::fs::{self, File};
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
-use std::{env, f64};
-use std::{sync::Arc, thread};
+use std::env;
+use std::sync::Arc;
 use futures::stream::{self, StreamExt};
 use tokio::task;
 

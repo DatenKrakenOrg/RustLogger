@@ -6,7 +6,6 @@ use config::{MessageTypesConfig, FieldValue};
 use message_generator::MessageGenerator;
 
 use std::{path::PathBuf, collections::HashMap};
-use polars::prelude::*;
 use utility::default_path;
 
 /// CLI Arguments to Parse via clap refer to documentation of clap for more information.
@@ -90,7 +89,7 @@ fn main() {
     }
 }
 
-/// Saves log data to a CSV file using Polars DataFrame.
+/// Saves log data to a CSV file using the standard csv crate.
 /// 
 /// # Arguments
 /// * `logs` - Vector of log entries as HashMaps with field names and values
@@ -99,6 +98,10 @@ fn main() {
 /// 
 /// # Returns
 /// * `Result<(), Box<dyn std::error::Error>>` - Success or error details
+/// 
+/// # Implementation
+/// Uses streaming CSV writer for efficient memory usage and simple implementation.
+/// Writes header row first, then data rows in the specified field order.
 fn save_logs_to_csv(
     logs: &[HashMap<String, FieldValue>], 
     file_path: &PathBuf, 
@@ -109,37 +112,32 @@ fn save_logs_to_csv(
         return Ok(());
     }
 
-    // Print header for console output
+    // Log header for debugging
     let header = field_order.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(",");
     log::debug!("CSV Header: {}", header);
 
-    // Create columns for DataFrame
-    let mut columns: Vec<Column> = Vec::new();
-
-    // Create a Polars Series for each field in the specified order
-    for field_name in &field_order {
-        // Extract values for this field from all log entries
-        let values: Vec<String> = logs
+    // Create CSV writer for the output file
+    let mut writer = csv::Writer::from_path(file_path)?;
+    
+    // Write header row with field names
+    writer.write_record(field_order.iter().map(|s| s.as_str()))?;
+    
+    // Write data rows
+    for log_entry in logs {
+        // Create row with values in the specified field order
+        let row: Vec<String> = field_order
             .iter()
-            .map(|log| {
-                log.get(*field_name)
-                    .map(|v| v.to_csv_string())
-                    .unwrap_or_else(|| "".to_string())
+            .map(|field_name| {
+                log_entry.get(*field_name)
+                    .map(|value| value.to_csv_string())
+                    .unwrap_or_default()
             })
             .collect();
-
-        // Create a Series (column) and add to the columns vector
-        let series = Series::new((*field_name).into(), values);
-        columns.push(series.into());
+        
+        writer.write_record(&row)?;
     }
-
-    // Create DataFrame from columns and write to CSV file
-    let df = DataFrame::new(columns)?;
     
-    let mut file = std::fs::File::create(file_path)?;
-    CsvWriter::new(&mut file)
-        .include_header(true)
-        .finish(&mut df.clone())?;
-    
+    // Ensure all data is written to file
+    writer.flush()?;
     Ok(())
 }
