@@ -40,6 +40,7 @@ struct Args {
 /// Parses command line arguments, loads configuration, and generates log data
 /// for the specified message types, saving each type to its own CSV file.
 fn main() {
+    env_logger::init();
     // Parse command line arguments
     let args = Args::parse();
 
@@ -63,7 +64,7 @@ fn main() {
     // Generate logs for each selected message type
     for message_type in &selected_types {
         if let Some(type_config) = config.get_type(message_type) {
-            println!("Generating {} logs for message type: {}", args.count, message_type);
+            log::info!("Generating {} logs for message type: {}", args.count, message_type);
             
             // Create a message generator for this specific type
             let mut generator = MessageGenerator::new(
@@ -82,9 +83,9 @@ fn main() {
             save_logs_to_csv(&logs, &file_path, type_config.fields.keys().collect())
                 .expect("Failed to save logs to CSV");
             
-            println!("Saved {} logs to: {}", args.count, file_path.display());
+            log::info!("Saved {} logs to: {}", args.count, file_path.display());
         } else {
-            eprintln!("Unknown message type: {}", message_type);
+            log::error!("Unknown message type: {}", message_type);
         }
     }
 }
@@ -110,7 +111,7 @@ fn save_logs_to_csv(
 
     // Print header for console output
     let header = field_order.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(",");
-    println!("{}", header);
+    log::debug!("CSV Header: {}", header);
 
     // Create columns for DataFrame
     let mut columns: Vec<Column> = Vec::new();

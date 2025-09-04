@@ -2,24 +2,34 @@ use anyhow::Result;
 use dotenvy::dotenv;
 use std::env;
 
+/// Configuration for the container log collector
+/// Loads settings from environment variables with sensible defaults
 #[derive(Debug, Clone)]
 pub struct Config {
+    /// Address to bind the syslog UDP server to (default: "0.0.0.0")
     pub bind_address: String,
+    /// UDP port for the syslog server (default: 514)
     pub syslog_port: u16,
+    /// HTTP URL of the log forwarding API (default: "http://localhost:8080")
     pub api_url: String,
-    pub log_level: String,
-    pub batch_size: usize,
-    pub batch_timeout_ms: u64,
-    pub buffer_db_path: String,
-    pub max_retries: i32,
-    pub retry_delay_secs: u64,
-    pub cleanup_failed_after_hours: i64,
+    /// Secret API key for authentication
     pub secret: String,
 }
 
-
-
 impl Config {
+    /// Loads configuration from environment variables
+    /// 
+    /// # Arguments
+    /// * `config_path` - Path to .env file to load (falls back to default .env)
+    /// 
+    /// # Returns
+    /// * `Result<Self>` - Configuration struct or error if loading fails
+    /// 
+    /// # Environment Variables
+    /// * `BIND_ADDRESS` - Server bind address (default: "0.0.0.0")
+    /// * `SYSLOG_PORT` - UDP port for syslog server (default: 514)
+    /// * `API_URL` - HTTP URL of log forwarding API (default: "http://localhost:8080")
+    /// * `SECRET_API_KEY` - API authentication key (default: "123456")
     pub fn load(config_path: &str) -> Result<Self> {
         // Load the specified config file
         if std::path::Path::new(config_path).exists() {
@@ -37,30 +47,6 @@ impl Config {
                 .unwrap_or(514),
             api_url: env::var("API_URL")
                 .unwrap_or_else(|_| "http://localhost:8080".to_string()),
-            log_level: env::var("LOG_LEVEL")
-                .unwrap_or_else(|_| "info".to_string()),
-            batch_size: env::var("BATCH_SIZE")
-                .unwrap_or_else(|_| "100".to_string())
-                .parse()
-                .unwrap_or(100),
-            batch_timeout_ms: env::var("BATCH_TIMEOUT_MS")
-                .unwrap_or_else(|_| "5000".to_string())
-                .parse()
-                .unwrap_or(5000),
-            buffer_db_path: env::var("BUFFER_DB_PATH")
-                .unwrap_or_else(|_| "/var/lib/container-collector/buffer.db".to_string()),
-            max_retries: env::var("MAX_RETRIES")
-                .unwrap_or_else(|_| "5".to_string())
-                .parse()
-                .unwrap_or(5),
-            retry_delay_secs: env::var("RETRY_DELAY_SECS")
-                .unwrap_or_else(|_| "30".to_string())
-                .parse()
-                .unwrap_or(30),
-            cleanup_failed_after_hours: env::var("CLEANUP_FAILED_AFTER_HOURS")
-                .unwrap_or_else(|_| "24".to_string())
-                .parse()
-                .unwrap_or(24),
             secret: env::var("SECRET_API_KEY")
                 .unwrap_or_else(|_| "123456".to_string()),
         })

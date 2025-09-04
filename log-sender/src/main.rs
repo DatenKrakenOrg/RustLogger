@@ -90,6 +90,7 @@ impl Config {
 /// processing the log file each time.
 #[tokio::main]
 async fn main() {
+    env_logger::init();
     let config = Arc::new(Config::load().expect("Failed to load environment variables"));
     
     // Load message types configuration
@@ -100,7 +101,7 @@ async fn main() {
     let csv_files = find_matching_csv_files(&config.logs_directory, &message_config);
     
     if csv_files.is_empty() {
-        println!("No matching CSV files found in {}", config.logs_directory);
+        log::error!("No matching CSV files found in {}", config.logs_directory);
         std::process::exit(1);
     }
 
@@ -113,7 +114,7 @@ async fn main() {
         let csv_path_clone = csv_path.clone();
 
         let handle = task::spawn(async move {
-            println!("Starting thread for: {} ({})", csv_path_clone.display(), message_type_clone.name);
+            log::info!("Starting thread for: {} ({})", csv_path_clone.display(), message_type_clone.name);
 
             if config_clone.endless {
                 loop {
@@ -133,7 +134,7 @@ async fn main() {
     if !config.endless {
         for handle in handles {
             if let Err(e) = handle.await {
-                eprintln!("Thread panicked: {:?}", e);
+                log::error!("Thread panicked: {:?}", e);
             }
         }
     } else {
@@ -200,7 +201,7 @@ async fn process_file(config: &Config, message_type: &MessageTypeConfig, csv_fil
 
     // Count successes/failures
     let (successes, failures): (Vec<_>, Vec<_>) = results.into_iter().partition(Result::is_ok);
-    println!("File {}: {} successes, {} failures",
+    log::info!("File {}: {} successes, {} failures",
              csv_file_path.display(), successes.len(), failures.len());
 }
 /// Reads lines from a file and returns an iterator over them.
@@ -236,7 +237,7 @@ async fn send_log(
     message_type: &str, 
     csv_line: String
 ) -> Result<(), Error> {
-    //println!("Sending {} log: {}", message_type, csv_line);
+    log::debug!("Sending {} log: {}", message_type, csv_line);
 
     let payload = LogPayload {
         message_type: message_type.to_string(),
@@ -246,15 +247,15 @@ async fn send_log(
     let res = client.post(endpoint).header("X-Api-Key", secret).json(&payload).send().await?;
 
     if res.status() != 200 {
-        println!("Response: {}", res.status());
+        log::warn!("Non-200 response: {}", res.status());
     }
 
-    //println!("Response: {}", res.status());
+    log::trace!("Response: {}", res.status());
 
     match res.error_for_status() {
         Ok(_) => (),
         Err(err) => {
-            println!("Error: {}", err.to_string());
+            log::error!("HTTP request error: {}", err);
         }
     }
 

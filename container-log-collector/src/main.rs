@@ -1,55 +1,66 @@
 mod config;
 mod syslog_server;
 mod api_client;
-mod log_forwarder;
 
 use anyhow::Result;
 use clap::Parser;
 use config::Config;
 use api_client::ApiClient;
-use log_forwarder::LogForwarder;
 use syslog_server::SyslogServer;
 use std::sync::Arc;
 use tokio::signal;
 
+/// Command-line arguments for the container log collector
 #[derive(Parser)]
 #[command(name = "container-log-collector")]
-#[command(about = "A syslog-based container log collector for Docker and Podman")]
+#[command(about = "A simple syslog-to-HTTP forwarder for container logs")]
 struct Args {
+    /// Path to configuration file (.env format)
     #[arg(short, long, default_value = "config.env")]
     config: String,
 }
 
+/// Main entry point for the container log collector
+/// 
+/// # Behavior
+/// - Initializes logging with env_logger
+/// - Loads configuration from specified file or environment
+/// - Creates HTTP client for API communication
+/// - Starts UDP syslog server
+/// - Runs until SIGINT/SIGTERM received
+/// - Provides clean shutdown handling
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
     let args = Args::parse();
     
-    println!("Starting Container Log Collector");
+    log::info!("Starting Container Log Collector");
     
+    // Load configuration from file or environment variables
     let config = Arc::new(Config::load(&args.config)?);
-    println!("Configuration loaded from: {}", args.config);
+    log::info!("Configuration loaded from: {}", args.config);
     
-    // Try to create API client but don't fail if it's unavailable at startup
-    let api_client = ApiClient::new(&config).await?;
+    // Create HTTP client for API communication
+    let api_client = Arc::new(ApiClient::new(&config).await?);
+    log::info!("API client created for: {}", config.api_url);
     
-    let log_forwarder = Arc::new(LogForwarder::new(config.clone(), Arc::new(api_client).clone()).await?);
+    // Create and start the syslog server
+    let syslog_server = SyslogServer::new(config.clone(), api_client);
+    log::info!("Starting syslog server on {}:{}", config.bind_address, config.syslog_port);
     
-    let syslog_server = SyslogServer::new(config.clone(), log_forwarder);
-    
-    println!("Starting syslog server on {}:{}", config.bind_address, config.syslog_port);
-    
+    // Run server until shutdown signal received
     tokio::select! {
         result = syslog_server.run() => {
             if let Err(e) = result {
-                println!("Syslog server error: {}", e);
+                log::error!("Syslog server error: {}", e);
+                return Err(e);
             }
         }
         _ = signal::ctrl_c() => {
-            println!("Received shutdown signal, stopping server...");
+            log::info!("Received shutdown signal, stopping server...");
         }
     }
     
-    println!("Container Log Collector stopped");
+    log::info!("Container Log Collector stopped");
     Ok(())
 }
