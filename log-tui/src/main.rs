@@ -31,10 +31,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut app = App::new(api_base_url);
-    
-    if let Err(e) = app.refresh_logs().await {
-        eprintln!("Failed to fetch initial logs: {}", e);
-    }
 
     let res = run_app(&mut terminal, &mut app).await;
 
@@ -70,49 +66,61 @@ async fn run_app<B: Backend>(
         if event::poll(timeout_duration)? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
-                    match app.mode {
-                        Mode::Normal => {
-                            match key.code {
-                                KeyCode::Char('q') => return Ok(()),
-                                KeyCode::Up => app.move_selection_up(),
-                                KeyCode::Down => app.move_selection_down(),
-                                 KeyCode::Char('w') => app.page_up(10),
-                                 KeyCode::Char('s') => app.page_down(10),
-                                KeyCode::Char('r') => {
-                                    if let Err(e) = app.refresh_logs().await {
-                                        app.error_message = Some(format!("Refresh failed: {}", e));
-                                    }
+                match app.mode {
+                    Mode::Auth => {
+                        match key.code {
+                            KeyCode::Char('q') => return Ok(()),
+                            KeyCode::Enter => {
+                                if let Err(e) = app.execute_input().await {
+                                    app.auth_error = Some(format!("Authentication failed: {}", e));
                                 }
-                                KeyCode::Char('/') => {
-                                    app.enter_search_mode();
-                                }
-                                 KeyCode::Char('f') => {
-                                     app.cycle_sort_field();
-                                 }
-                                 KeyCode::Char('o') => {
-                                     app.toggle_sort_direction();
-                                 }
-                                 KeyCode::Char('l') => {
-                                     app.enter_limit_mode();
-                                 }
-                                 KeyCode::Char('S') => {
-                                     app.enter_sort_mode();
-                                 }
-                                KeyCode::Char('a') => {
-                                    app.toggle_auto_refresh();
-                                }
-                                KeyCode::Char('c') => {
-                                    app.clear_search();
-                                    if let Err(e) = app.refresh_logs().await {
-                                        app.error_message = Some(format!("Refresh failed: {}", e));
-                                    }
-                                }
-                                 KeyCode::Enter => {
-                                     app.enter_details_mode();
-                                 }
-                                _ => {}
                             }
+                            KeyCode::Char(c) => {
+                                app.handle_input_char(c);
+                            }
+                            KeyCode::Backspace => {
+                                app.handle_backspace();
+                            }
+                            _ => {}
                         }
+                    }
+                    Mode::Normal => {
+                        match key.code {
+                            KeyCode::Char('q') => return Ok(()),
+                            KeyCode::Up => app.move_selection_up(),
+                            KeyCode::Down => app.move_selection_down(),
+                            KeyCode::Char('r') => {
+                                if let Err(e) = app.refresh_logs().await {
+                                    app.error_message = Some(format!("Refresh failed: {}", e));
+                                }
+                            }
+                            KeyCode::Char('/') => {
+                                app.enter_search_mode();
+                            }
+                             KeyCode::Char('f') => {
+                                 app.cycle_sort_field();
+                             }
+                             KeyCode::Char('o') => {
+                                 app.toggle_sort_direction();
+                             }
+                             KeyCode::Char('l') => {
+                                 app.enter_limit_mode();
+                             }
+                            KeyCode::Char('a') => {
+                                app.toggle_auto_refresh();
+                            }
+                            KeyCode::Char('c') => {
+                                app.clear_search();
+                                if let Err(e) = app.refresh_logs().await {
+                                    app.error_message = Some(format!("Refresh failed: {}", e));
+                                }
+                            }
+                             KeyCode::Enter => {
+                                 app.enter_details_mode();
+                             }
+                            _ => {}
+                        }
+                    }
                         Mode::Details => {
                             match key.code {
                                 KeyCode::Esc | KeyCode::Enter => {
@@ -121,33 +129,33 @@ async fn run_app<B: Backend>(
                                 _ => {}
                             }
                         }
-                         Mode::Search | Mode::Sort | Mode::Limit => {
-                            match key.code {
-                                 KeyCode::Enter => {
-                                     if let Err(e) = app.execute_input().await {
-                                         app.error_message = Some(format!("Input failed: {}", e));
-                                         app.exit_mode();
-                                     }
+                    Mode::Search | Mode::Limit => {
+                        match key.code {
+                             KeyCode::Enter => {
+                                 if let Err(e) = app.execute_input().await {
+                                     app.error_message = Some(format!("Input failed: {}", e));
+                                     app.exit_mode();
                                  }
-                                KeyCode::Esc => {
-                                    app.exit_mode();
-                                }
-                                KeyCode::Char(c) => {
-                                    app.handle_input_char(c);
-                                }
-                                KeyCode::Backspace => {
-                                    app.handle_backspace();
-                                }
-                                _ => {}
+                             }
+                            KeyCode::Esc => {
+                                app.exit_mode();
                             }
+                            KeyCode::Char(c) => {
+                                app.handle_input_char(c);
+                            }
+                            KeyCode::Backspace => {
+                                app.handle_backspace();
+                            }
+                            _ => {}
                         }
+                    }
                     }
                 }
             }
         }
 
         if last_tick.elapsed() >= tick_rate {
-            if app.should_refresh() {
+            if app.mode != Mode::Auth && app.should_refresh() {
                 if let Err(e) = app.refresh_logs().await {
                     app.error_message = Some(format!("Auto-refresh failed: {}", e));
                 }

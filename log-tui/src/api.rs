@@ -35,6 +35,7 @@ pub struct LogsResponse {
 pub struct ApiClient {
     client: Client,
     base_url: String,
+    api_key: Option<String>,
 }
 
 impl ApiClient {
@@ -42,7 +43,12 @@ impl ApiClient {
         Self {
             client: Client::new(),
             base_url,
+            api_key: None,
         }
+    }
+
+    pub fn set_api_key(&mut self, api_key: Option<String>) {
+        self.api_key = api_key;
     }
 
     pub async fn fetch_logs(
@@ -77,13 +83,19 @@ impl ApiClient {
         }
 
         if !params.is_empty() {
-            url.push('?');
-            url.push_str(&params.join("&"));
-        }
+        url.push('?');
+        url.push_str(&params.join("&"));
+    }
 
-        let response = self.client.get(&url).send().await?;
-        let logs_response: LogsResponse = response.json().await?;
-        Ok(logs_response.logs)
+    let mut request = self.client.get(&url);
+    
+    if let Some(ref api_key) = self.api_key {
+        request = request.header("X-API-Key", api_key);
+    }
+    
+    let response = request.send().await?;
+    let logs_response: LogsResponse = response.json().await?;
+    Ok(logs_response.logs)
     }
 
     pub async fn search_logs(
@@ -105,7 +117,13 @@ impl ApiClient {
         url.push('?');
         url.push_str(&params.join("&"));
 
-        let response = self.client.get(&url).send().await?;
+        let mut request = self.client.get(&url);
+        
+        if let Some(ref api_key) = self.api_key {
+            request = request.header("X-API-Key", api_key);
+        }
+        
+        let response = request.send().await?;
         let logs_response: LogsResponse = response.json().await?;
         Ok(logs_response.logs)
     }

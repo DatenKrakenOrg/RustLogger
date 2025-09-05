@@ -19,22 +19,26 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         ])
         .split(f.size());
 
-    draw_header(f, chunks[0], app);
-    draw_logs(f, chunks[1], app);
-    draw_footer(f, chunks[2], app);
+    if app.mode == Mode::Auth {
+        draw_auth_window(f, app);
+    } else {
+        draw_header(f, chunks[0], app);
+        draw_logs(f, chunks[1], app);
+        draw_footer(f, chunks[2], app);
 
-    if app.mode == Mode::Search || app.mode == Mode::Sort || app.mode == Mode::Limit {
-        draw_input_popup(f, app);
-    } else if app.mode == Mode::Details {
-        draw_detail_popup(f, app);
+        if app.mode == Mode::Search || app.mode == Mode::Limit {
+            draw_input_popup(f, app);
+        } else if app.mode == Mode::Details {
+            draw_detail_popup(f, app);
+        }
     }
 }
 
 fn draw_header(f: &mut Frame, area: Rect, app: &App) {
     let title = match app.mode {
+        Mode::Auth => "Authentication",
         Mode::Normal => "Log Viewer",
         Mode::Search => "Search Mode",
-        Mode::Sort => "Sort Mode",
         Mode::Limit => "Limit Mode",
         Mode::Details => "Log Details",
     };
@@ -47,6 +51,15 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
         " [Auto-refresh ON] ".to_string()
     } else {
         " [Auto-refresh OFF] ".to_string()
+    };
+
+    let last_refresh_text = format!(" | Last refresh: {}", 
+        app.last_refresh.elapsed().as_secs() / 60,
+    );
+    let last_refresh_display = if app.last_refresh.elapsed().as_secs() < 60 {
+        format!(" | Last refresh: {}s ago", app.last_refresh.elapsed().as_secs())
+    } else {
+        format!(" | Last refresh: {}m ago", app.last_refresh.elapsed().as_secs() / 60)
     };
 
     let header = Paragraph::new(Line::from(vec![
@@ -74,6 +87,7 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
             Style::default().fg(Color::Magenta),
         ),
         Span::styled(status_text, Style::default().fg(Color::Yellow)),
+        Span::styled(last_refresh_display, Style::default().fg(Color::LightBlue)),
     ]))
     .block(Block::default().borders(Borders::ALL))
     .alignment(Alignment::Left);
@@ -163,14 +177,14 @@ fn draw_logs(f: &mut Frame, area: Rect, app: &mut App) {
 
 fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
     let help_text = match app.mode {
+        Mode::Auth => {
+            "Enter your API key | Enter: Authenticate | q: Quit"
+        }
         Mode::Normal => {
-            "↑/↓: Navigate | w/s: Page | Enter: Details | /: Search | f: Sort field | o: Sort order | S: Custom sort | l: Limit | r: Refresh | a: Auto-refresh | c: Clear | q: Quit"
+            "↑/↓: Navigate | Enter: Details | /: Search | f: Sort field | o: Sort order | l: Limit | r: Refresh | a: Auto-refresh | c: Clear | q: Quit"
         }
         Mode::Search => {
             "Type search query | Enter: Execute search | Esc: Cancel"
-        }
-        Mode::Sort => {
-            "Sort commands: 'timestamp asc', 'level desc', 'device', 'temperature', 'humidity' | Enter: Apply | Esc: Cancel"
         }
         Mode::Limit => {
             "Enter number of logs to fetch (current: {}) | Enter: Apply | Esc: Cancel"
@@ -201,7 +215,6 @@ fn draw_input_popup(f: &mut Frame, app: &App) {
 
     let title = match app.mode {
         Mode::Search => "Search Logs",
-        Mode::Sort => "Sort Logs (field [asc|desc])",
         Mode::Limit => "Set Log Limit",
         _ => "Input",
     };
@@ -264,6 +277,106 @@ fn draw_detail_popup(f: &mut Frame, app: &App) {
 
         f.render_widget(detail, area);
     }
+}
+
+fn draw_auth_window(f: &mut Frame, app: &App) {
+    let area = f.size();
+    
+    // Create a centered layout for the authentication form
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(30),
+            Constraint::Min(10),
+            Constraint::Percentage(30),
+        ])
+        .split(area);
+
+    let auth_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(20),
+            Constraint::Percentage(60),
+            Constraint::Percentage(20),
+        ])
+        .split(chunks[1]);
+
+    let content_area = auth_chunks[1];
+
+    // Split content area for title, input, and status
+    let content_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Min(1),
+        ])
+        .split(content_area);
+
+    // Draw title
+    let title = Paragraph::new("Log Viewer Authentication")
+        .block(Block::default().borders(Borders::ALL))
+        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .alignment(Alignment::Center);
+    f.render_widget(title, content_chunks[0]);
+
+    // Draw API key input (masked)
+    let input_text = if app.loading {
+        "Authenticating...".to_string()
+    } else {
+        app.get_masked_input()
+    };
+
+    let input = Paragraph::new(input_text.as_str())
+        .style(if app.loading {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::Green)
+        })
+        .block(Block::default().borders(Borders::ALL).title("API Key"));
+    f.render_widget(input, content_chunks[1]);
+
+    // Set cursor position if not loading
+    if !app.loading {
+        f.set_cursor(
+            content_chunks[1].x + app.input_buffer.len() as u16 + 1,
+            content_chunks[1].y + 1,
+        );
+    }
+
+    // Draw status/error message
+    if let Some(ref error) = app.auth_error {
+        let error_msg = Paragraph::new(error.as_str())
+            .style(Style::default().fg(Color::Red))
+            .block(Block::default().borders(Borders::ALL).title("Error"))
+            .alignment(Alignment::Center);
+        f.render_widget(error_msg, content_chunks[2]);
+    } else if app.loading {
+        let loading_msg = Paragraph::new("Please wait while authenticating...")
+            .style(Style::default().fg(Color::Yellow))
+            .block(Block::default().borders(Borders::ALL).title("Status"))
+            .alignment(Alignment::Center);
+        f.render_widget(loading_msg, content_chunks[2]);
+    } else {
+        let help_msg = Paragraph::new("Enter your API key and press Enter to authenticate")
+            .style(Style::default().fg(Color::Gray))
+            .block(Block::default().borders(Borders::ALL).title("Instructions"))
+            .alignment(Alignment::Center);
+        f.render_widget(help_msg, content_chunks[2]);
+    }
+
+    // Draw footer with help text
+    let footer_area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(3)])
+        .split(area)[1];
+
+    let footer = Paragraph::new("Enter: Authenticate | q: Quit")
+        .block(Block::default().borders(Borders::ALL))
+        .style(Style::default().fg(Color::Gray))
+        .alignment(Alignment::Center);
+    f.render_widget(footer, footer_area);
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {

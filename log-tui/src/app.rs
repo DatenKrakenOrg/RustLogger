@@ -1,13 +1,12 @@
 use crate::api::{ApiClient, LogEntry, LogLevel};
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Mode {
+    Auth,
     Normal,
     Search,
-    Sort,
     Limit,
     Details,
 }
@@ -57,6 +56,8 @@ pub struct App {
     pub refresh_interval: Duration,
     pub loading: bool,
     pub error_message: Option<String>,
+    pub api_key: Option<String>,
+    pub auth_error: Option<String>,
 }
 
 impl App {
@@ -65,7 +66,7 @@ impl App {
             logs: Vec::new(),
             selected_index: 0,
             scroll_offset: 0,
-            mode: Mode::Normal,
+            mode: Mode::Auth,
             search_query: String::new(),
             sort_state: SortState::default(),
             log_limit: 100,
@@ -76,6 +77,8 @@ impl App {
             refresh_interval: Duration::from_secs(5),
             loading: false,
             error_message: None,
+            api_key: None,
+            auth_error: None,
         }
     }
 
@@ -130,27 +133,11 @@ impl App {
         }
     }
 
-    pub fn page_up(&mut self, page_size: usize) {
-        self.selected_index = self.selected_index.saturating_sub(page_size);
-        self.scroll_offset = self.scroll_offset.saturating_sub(page_size);
-    }
-
-    pub fn page_down(&mut self, page_size: usize) {
-        if !self.logs.is_empty() {
-            self.selected_index = (self.selected_index + page_size).min(self.logs.len() - 1);
-        }
-    }
-
     pub fn enter_search_mode(&mut self) {
         self.mode = Mode::Search;
         self.input_buffer.clear();
     }
 
-    pub fn enter_sort_mode(&mut self) {
-        self.mode = Mode::Sort;
-        self.input_buffer.clear();
-    }
-    
     pub fn enter_limit_mode(&mut self) {
         self.mode = Mode::Limit;
         self.input_buffer = self.log_limit.to_string();
@@ -177,13 +164,6 @@ impl App {
                 self.input_buffer.clear();
                 self.refresh_logs().await
             }
-            Mode::Sort => {
-                self.parse_and_apply_sort(&self.input_buffer.clone())?;
-                self.mode = Mode::Normal;
-                self.input_buffer.clear();
-                self.apply_current_sort();
-                Ok(())
-            }
             Mode::Limit => {
                 if let Ok(limit) = self.input_buffer.parse::<usize>() {
                     self.log_limit = limit.max(1);
@@ -192,38 +172,11 @@ impl App {
                 self.input_buffer.clear();
                 self.refresh_logs().await
             }
+            Mode::Auth => {
+                self.authenticate().await
+            }
             _ => Ok(())
         }
-    }
-    
-    pub fn parse_and_apply_sort(&mut self, sort_input: &str) -> Result<()> {
-        let parts: Vec<&str> = sort_input.trim().split_whitespace().collect();
-        if parts.is_empty() {
-            return Ok(());
-        }
-
-        let field = match parts[0].to_lowercase().as_str() {
-            "timestamp" | "time" | "t" => SortField::Timestamp,
-            "level" | "l" => SortField::Level,
-            "device" | "d" => SortField::Device,
-            "temperature" | "temp" => SortField::Temperature,
-            "humidity" | "h" => SortField::Humidity,
-            _ => return Ok(()),
-        };
-
-        let direction = if parts.len() > 1 {
-            match parts[1].to_lowercase().as_str() {
-                "asc" | "ascending" | "up" => SortDirection::Ascending,
-                "desc" | "descending" | "down" => SortDirection::Descending,
-                _ => SortDirection::Descending,
-            }
-        } else {
-            SortDirection::Descending
-        };
-
-        self.sort_state.field = field;
-        self.sort_state.direction = direction;
-        Ok(())
     }
     
     pub fn sort_logs(&self, logs: &mut Vec<LogEntry>) {
@@ -334,5 +287,42 @@ impl App {
             LogLevel::Warn => ratatui::style::Color::Yellow,
             LogLevel::Info => ratatui::style::Color::Blue,
         }
+    }
+
+    pub async fn authenticate(&mut self) -> Result<()> {
+        if self.input_buffer.trim().is_empty() {
+            self.auth_error = Some("API key cannot be empty".to_string());
+            return Ok(());
+        }
+
+        self.loading = true;
+        self.auth_error = None;
+        
+        let api_key = self.input_buffer.trim().to_string();
+        self.api_client.set_api_key(Some(api_key.clone()));
+        
+        // Test the API key by making a simple request
+        match self.api_client.fetch_logs(Some(1), Some(0), None, None, None, None).await {
+            Ok(_) => {
+                self.api_key = Some(api_key);
+                self.mode = Mode::Normal;
+                self.input_buffer.clear();
+                self.loading = false;
+                // Fetch initial logs
+                self.refresh_logs().await
+            }
+            Err(e) => {
+                self.loading = false;
+                self.auth_error = Some(format!("Authentication failed: {}", e));
+                self.api_client.set_api_key(None);
+                Ok(())
+            }
+        }
+    }
+
+
+
+    pub fn get_masked_input(&self) -> String {
+        "*".repeat(self.input_buffer.len())
     }
 }
