@@ -19,6 +19,7 @@ struct Config {
     repetitions: i32,
     logfile_path: String,
     endpoint: String,
+    secret: String,
 }
 
 impl Config {
@@ -28,7 +29,9 @@ impl Config {
     /// - Ok(Config) if all required variables are present and valid
     /// - Err(String) with error message if any variable is missing or invalid
     fn load() -> Result<Self, String> {
-        dotenv().ok(); // Load .env file
+        if env::var("DEPLOYMENT").unwrap_or_default() != "PROD" {
+            dotenv().ok();
+        }
         Ok(Self {
             endless: env::var("ENDLESS")
                 .map_err(|_| "ENDLESS environment variable is missing")?
@@ -42,6 +45,8 @@ impl Config {
                 .map_err(|_| "LOGFILE_PATH environment variable is missing")?,
             endpoint: env::var("ENDPOINT")
                 .map_err(|_| "ENDPOINT environment variable is missing")?,
+            secret: env::var("SECRET_API_KEY")
+                .map_err(|_| "SECRET_API_KEY environment variable is missing")?,
         })
     }
 }
@@ -98,7 +103,7 @@ async fn process_file(config: &Config) {
     lines.next();
     // Consumes the iterator, returns an (Optional) String
     for line in lines.map_while(Result::ok) {
-        send_value(&client, &config.endpoint, line)
+        send_value(&client, &config.endpoint,&config.secret, line)
             .await
             .expect("Failed to establish a connection")
     }
@@ -131,14 +136,14 @@ where
 ///
 /// # Returns
 /// * `Result<(), Error>` - Ok if successful, Error if HTTP request fails
-async fn send_value(client: &reqwest::Client, endpoint: &str, line: String) -> Result<(), Error> {
+async fn send_value(client: &reqwest::Client, endpoint: &str,secret:&str, line: String) -> Result<(), Error> {
     let mut data = line.split(",");
 
     println!("{}", line);
 
     let log_entry = create_log_entry(&mut data);
 
-    let res = client.post(endpoint).json(&log_entry).send().await?;
+    let res = client.post(endpoint).header("X-Api-Key", secret).json(&log_entry).send().await?;
 
     println!("{}", res.status());
 
