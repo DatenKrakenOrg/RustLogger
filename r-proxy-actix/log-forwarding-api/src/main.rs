@@ -126,6 +126,7 @@ async fn main() -> std::io::Result<()> {
             .service(send_log)
             .service(who_are_you)
             .service(elastic_node_info)
+            .service(send_container_log)
             .wrap(Logger::default())
     })
     .bind(("0.0.0.0", 8080))?
