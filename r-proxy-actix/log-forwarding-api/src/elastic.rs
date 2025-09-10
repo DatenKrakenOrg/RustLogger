@@ -1,4 +1,4 @@
-use crate::serializable_objects::LogEntry;
+use crate::log_entry::ElasticLogDocument;
 use crate::server_error::ServerError;
 use actix_web::http::StatusCode;
 use elasticsearch::{
@@ -8,6 +8,7 @@ use elasticsearch::{
     indices::{IndicesCreateParts, IndicesExistsParts},
 };
 //use env_logger::builder;
+use serde::Serialize;
 use serde_json::{Value, json};
 use std::env;
 use std::result::Result::Ok;
@@ -60,7 +61,7 @@ pub fn create_client() -> Result<Elasticsearch, ServerError> {
     Ok(Elasticsearch::new(transport))
 }
 
-/// Creates an index in elastic search based on the cluster on the client passed
+/// Creates the index used for the common log gen logs in elastic search based on the cluster on the client passed
 ///
 /// # Examples:
 /// ```
@@ -77,9 +78,8 @@ pub fn create_client() -> Result<Elasticsearch, ServerError> {
 pub async fn create_logs_index(
     index_name: &str,
     connector: &Elasticsearch,
+    mapping: Value,
 ) -> Result<String, ServerError> {
-    let mapping = create_log_mapping();
-
     // Get index settings from environment variables with defaults
     let replicas: u32 = env::var("ELASTIC_INDEX_REPLICAS")
         .unwrap_or_else(|_| "1".to_string())
@@ -130,14 +130,23 @@ pub async fn create_logs_index(
 }
 
 /// Persists a document in elasticsearch based on a client and a index
-pub async fn send_document(
+pub async fn send_document<T>(
     index_name: &str,
     client: &Elasticsearch,
-    log_entry: &LogEntry,
-) -> Result<String, ServerError> {
+    log_entry: &T,
+) -> Result<String, ServerError>
+where
+    T: ElasticLogDocument + Serialize,
+{
+    let json_value = log_entry.to_document_json().map_err(|e| ServerError {
+        code: StatusCode::INTERNAL_SERVER_ERROR,
+        message: String::from("Error while serializing log entry to JSON"),
+        additional_information: e.to_string(),
+    })?;
+
     let response = client
         .index(IndexParts::Index(index_name))
-        .body(log_entry)
+        .body(json_value)
         .send()
         .await
         .map_err(|e| ServerError {
@@ -185,7 +194,7 @@ pub async fn get_nodes(client: &Elasticsearch) -> Result<String, ServerError> {
 }
 
 /// Creates a log mapping. This is needed in order to create a index in elastic search. It's format matches the logs.
-fn create_log_mapping() -> Value {
+pub fn create_log_mapping() -> Value {
     json!({
         "properties": {
             "timestamp": {
@@ -203,6 +212,20 @@ fn create_log_mapping() -> Value {
                     "exceeded_values": { "type": "boolean" }
                 }
             }
+        }
+    })
+}
+
+pub fn create_container_log_mapping() -> Value {
+    json!({
+        "properties" : {
+            "timestamp": {
+                "type": "date",
+                // RFC3339/ISO-8601 format => Parseable by chrono
+                "format": "strict_date_optional_time||epoch_millis"
+            },
+            "container_name": { "type": "keyword" },
+            "log_message": { "type": "text", "analyzer": "standard"  },
         }
     })
 }
