@@ -3,6 +3,26 @@ networks:
     driver: bridge
 
 services:
+  container-log-collector:
+    build:
+      context: ../container-log-collector/
+      dockerfile: Dockerfile
+    container_name: container-log-collector
+    env_file: .env
+    ports:
+      - "5050:5050/udp"
+    networks:
+      - logger-network
+    healthcheck:
+      test: [ "CMD-SHELL", "nc -z -u localhost 5050 || exit 1" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+
+
   haproxy:
     build:
       context: ./haproxy/
@@ -201,6 +221,9 @@ services:
       interval: 1s
       timeout: 5s
       retries: 120
+    depends_on:
+      container-log-collector:
+        condition: service_healthy
 
   es01:
     depends_on:
