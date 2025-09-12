@@ -65,7 +65,6 @@ impl ApiClient {
             log_message: syslog.msg.to_string(),
         };
         
-
         let url = format!("{}/send_container_log", self.config.api_url);
         let response = self
             .client
@@ -75,7 +74,7 @@ impl ApiClient {
             .send()
             .await
             .context("Failed to send log to API")?;
-
+ 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
             log::error!("API request failed {}",error_text);
