@@ -1,5 +1,5 @@
 ARG RUST_VERSION=latest
-ARG APP_NAME=rust-logger
+ARG APP_NAME=log-generator
 
 FROM rust:${RUST_VERSION} AS builder
 ARG APP_NAME
@@ -47,4 +47,4 @@ USER rust-log-user
 
 # What the container should run when it is started.
 
-CMD ["/app/rust-logger" ,"-p","/etc/logs/logs.csv"]
+CMD ["/app/log-generator" ,"-p","/etc/logs/logs.csv"]
