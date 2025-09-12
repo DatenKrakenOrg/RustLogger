@@ -92,6 +92,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "log-forwarding-lb"
 
   log-forwarding-api-1:
     build:
