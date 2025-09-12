@@ -4,6 +4,7 @@ use reqwest::Client;
 use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use syslog_loose::{parse_message,Variant};
 
 /// JSON payload for sending a single log to the API
 #[derive(Debug, Serialize)]
@@ -52,18 +53,18 @@ impl ApiClient {
     /// * `Result<()>` - Success or error if HTTP request fails
     /// 
     /// # Behavior
-    /// - Wraps syslog message in JSON payload with message_type "container_logs"
-    /// - Sends POST request to {api_url}/send_log endpoint
+    /// - Wraps syslog message in JSON payload 
+    /// - Sends POST request to {api_url}/send_container_log endpoint
     /// - Includes X-Api-Key header for authentication
     /// - Logs errors but doesn't retry failed requests
     pub async fn send_log(&self, raw_syslog: &str) -> Result<()> {
+        let syslog = parse_message(raw_syslog,Variant::RFC3164);
         let payload = LogPayload {
-            timestamp: Utc::now(),
-            
-            container_name: "dfdjdj".to_string(),
-            log_message: "jzdjzdj".to_string(),
+            timestamp :syslog.timestamp.unwrap().to_utc(),
+            container_name: syslog.appname.expect("no hostname found").to_string(),
+            log_message: syslog.msg.to_string(),
         };
-        println!("{}",self.config.api_url);
+        
 
         let url = format!("{}/send_container_log", self.config.api_url);
         let response = self
