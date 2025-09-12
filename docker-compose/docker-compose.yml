@@ -3,14 +3,45 @@ networks:
     driver: bridge
 
 services:
-  container-log-collector:
+  container-log-collector-1:
     build:
       context: ../container-log-collector/
       dockerfile: Dockerfile
-    container_name: container-log-collector
+    container_name: container-log-collector-1
     env_file: .env
-    ports:
-      - "5050:5050/udp"
+
+    networks:
+      - logger-network
+    healthcheck:
+      test: [ "CMD-SHELL", "nc -z -u localhost 5050 || exit 1" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+  container-log-collector-2:
+    build:
+      context: ../container-log-collector/
+      dockerfile: Dockerfile
+    container_name: container-log-collector-2
+    env_file: .env
+
+    networks:
+      - logger-network
+    healthcheck:
+      test: [ "CMD-SHELL", "nc -z -u localhost 5050 || exit 1" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+  container-log-collector-3:
+    build:
+      context: ../container-log-collector/
+      dockerfile: Dockerfile
+    container_name: container-log-collector-3
+    env_file: .env
+
     networks:
       - logger-network
     healthcheck:
@@ -21,7 +52,29 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-
+  container-log-lb:
+    build:
+      context: ./container-log-lb
+      dockerfile: Dockerfile
+    ports:
+      - "5050:5050/udp"
+    env_file: .env
+    networks:
+      - logger-network
+    restart: unless-stopped
+    depends_on:
+        container-log-collector-1:
+            condition: service_healthy
+        container-log-collector-2:
+            condition: service_healthy
+        container-log-collector-3:
+            condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --ipv4 -fsS http://127.0.0.1/health -o /dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   haproxy:
     build:
@@ -116,6 +169,7 @@ services:
     depends_on:
       haproxy:
         condition: service_healthy
+
 
   log-forwarding-api-2:
     build:
@@ -227,7 +281,7 @@ services:
       timeout: 5s
       retries: 120
     depends_on:
-      container-log-collector:
+      container-log-lb:
         condition: service_healthy
 
   es01:
