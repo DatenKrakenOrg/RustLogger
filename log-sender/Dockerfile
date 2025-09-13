@@ -1,5 +1,5 @@
 ARG RUST_VERSION=latest
-ARG APP_NAME=log_sender
+ARG APP_NAME=log-sender
 
 FROM rust:${RUST_VERSION} AS builder
 ARG APP_NAME
@@ -38,8 +38,8 @@ RUN apt-get update && apt-get install -y libssl-dev
 
 WORKDIR /app
 
-COPY --from=builder /code/target/release/log_sender log_sender
+COPY --from=builder /code/target/release/log-sender log-sender
 
 USER 1001
 
-CMD ["/app/log_sender"]
+CMD ["/app/log-sender"]
