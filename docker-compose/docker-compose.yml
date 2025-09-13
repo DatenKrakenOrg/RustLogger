@@ -9,7 +9,6 @@ services:
       dockerfile: Dockerfile
     container_name: container-log-collector-1
     env_file: .env
-
     networks:
       - logger-network
     healthcheck:
@@ -19,6 +18,12 @@ services:
       retries: 10
       start_period: 30s
     restart: unless-stopped
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "container-log-collector-1"
+
   container-log-collector-2:
     build:
       context: ../container-log-collector/
@@ -35,6 +40,12 @@ services:
       retries: 10
       start_period: 30s
     restart: unless-stopped
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "container-log-collector-2"
+
   container-log-collector-3:
     build:
       context: ../container-log-collector/
@@ -51,6 +62,12 @@ services:
       retries: 10
       start_period: 30s
     restart: unless-stopped
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "container-log-collector-3"
+
 
   container-log-lb:
     build:
