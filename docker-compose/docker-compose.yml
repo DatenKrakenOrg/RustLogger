@@ -61,6 +61,7 @@ services:
     env_file: .env
     networks:
       - logger-network
+    container_name: container-log-lb
     restart: unless-stopped
     depends_on:
         container-log-collector-1:
@@ -139,6 +140,7 @@ services:
     depends_on:
       log-forwarding-api-3:
         condition: service_healthy
+
     healthcheck:
       test: ["CMD-SHELL", "curl --ipv4 -fsS http://127.0.0.1/health -o /dev/null"]
       interval: 30s
@@ -169,6 +171,11 @@ services:
     depends_on:
       haproxy:
         condition: service_healthy
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "log-forwarding-api-1"
 
 
   log-forwarding-api-2:
@@ -189,6 +196,12 @@ services:
     depends_on:
       log-forwarding-api-1:
           condition: service_healthy
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "log-forwarding-api-2"
+
 
   log-forwarding-api-3:
     build:
@@ -208,6 +221,11 @@ services:
     depends_on:
       log-forwarding-api-2:
           condition: service_healthy
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "log-forwarding-api-3"
 
   # elastic-stack
   elasticsetup:
@@ -283,6 +301,11 @@ services:
     depends_on:
       container-log-lb:
         condition: service_healthy
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "elasticsetup"
 
   es01:
     depends_on:
@@ -316,6 +339,11 @@ services:
       timeout: 10s
       retries: 120
       start_period: 20s
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "es01"
 
   es02:
     depends_on:
@@ -347,6 +375,11 @@ services:
       timeout: 10s
       retries: 120
       start_period: 20s
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "es02"
 
   es03:
     depends_on:
@@ -379,6 +412,11 @@ services:
       timeout: 10s
       retries: 120
       start_period: 20s
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "es03"
 
   es04:
     depends_on:
@@ -410,6 +448,11 @@ services:
       timeout: 10s
       retries: 120
       start_period: 20s
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "es04"
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.19.0
@@ -435,7 +478,11 @@ services:
     depends_on:
       haproxy:
         condition: service_healthy
-
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "kibana"
 
   log-gen:
     build:
@@ -446,6 +493,11 @@ services:
       - logs:/etc/logs
     networks:
       - logger-network
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "log-gen"
 
   log-sender:
     build:
@@ -462,6 +514,11 @@ services:
       - logs:/etc/logs
     networks:
       - logger-network
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "log-sender"
 
 volumes:
   certs:
