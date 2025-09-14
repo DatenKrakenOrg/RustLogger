@@ -16,6 +16,8 @@ services:
         condition: service_healthy
       es04:
         condition: service_healthy
+      es05:
+        condition: service_healthy
     volumes:
       - ./elastic-lb/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
       - certs:/usr/share/haproxy/certs
@@ -77,12 +79,18 @@ services:
           "      - localhost\n"\
           "    ip:\n"\
           "      - 127.0.0.1\n"\
-          "  - name: es04\n"\
-          "    dns:\n"\
-          "      - es04\n"\
-          "      - localhost\n"\
-          "    ip:\n"\
-          "      - 127.0.0.1\n"\
+           "  - name: es04\n"\
+           "    dns:\n"\
+           "      - es04\n"\
+           "      - localhost\n"\
+           "    ip:\n"\
+           "      - 127.0.0.1\n"\
+           "  - name: es05\n"\
+           "    dns:\n"\
+           "      - es05\n"\
+           "      - localhost\n"\
+           "    ip:\n"\
+           "      - 127.0.0.1\n"\
           > config/certs/instances.yml;
           bin/elasticsearch-certutil cert --silent --pem -out config/certs/certs.zip --in config/certs/instances.yml --ca-cert config/certs/ca/ca.crt --ca-key config/certs/ca/ca.key;
           unzip config/certs/certs.zip -d config/certs;
@@ -197,6 +205,33 @@ services:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata04:/usr/share/elasticsearch/data
       - ./elasticsearch/es04.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    environment:
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+    env_file: .env
+    networks:
+      - logger-network
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -s --cacert config/certs/ca/ca.crt -u \"$ELASTIC_USERNAME:$ELASTIC_PASSWORD\" http://localhost:9200/_cluster/health?wait_for_status=green&timeout=10s && curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials' || exit 1" ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+      start_period: 20s
+    mem_limit: ${MEM_LIMIT}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  es05:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    container_name: es05
+    depends_on:
+      elasticsetup:
+        condition: service_healthy
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+      - esdata05:/usr/share/elasticsearch/data
+      - ./elasticsearch/es05.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
     environment:
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
     env_file: .env
@@ -370,6 +405,8 @@ volumes:
   esdata03:
     driver: local
   esdata04:
+    driver: local
+  esdata05:
     driver: local
   kibanadata:
     driver: local

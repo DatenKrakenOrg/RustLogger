@@ -7,7 +7,7 @@ http.port: 9200
 transport.port: 9300
 
 # Discovery settings
-discovery.seed_hosts: ["es02", "es03", "es04"]
+discovery.seed_hosts: ["es02", "es03", "es04", "es05"]
 cluster.initial_master_nodes: ["es01"]
 
 # Security settings
@@ -34,7 +34,7 @@ xpack.monitoring.collection.enabled: true
 bootstrap.memory_lock: false
 
 # Node specialization - Master Coordinator
-node.roles: ["master","data", "ingest", "ml", "remote_cluster_client"]
+node.roles: ["master","data", "ingest", "remote_cluster_client"]
 node.attr.node_type: coordinator
 
 # Coordinator optimizations
