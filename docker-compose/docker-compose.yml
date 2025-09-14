@@ -3,16 +3,16 @@ networks:
     driver: bridge
 
 services:
-  haproxy:
+  elastic-lb:
     build:
-      context: ./haproxy/
+      context: ./elastic-lb/
       dockerfile: Dockerfile
-    container_name: haproxy
+    container_name: elastic-lb
     ports:
-      - "9200:9200" # Expose HAProxy for Elasticsearch
-      - "8404:8404" # Expose HAProxy stats/healtz page
+      - "9200:9200" # Expose elastic-lb for Elasticsearch
+      - "8404:8404" # Expose elastic-lb stats/healtz page
     volumes:
-      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./elastic-lb/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
       - certs:/usr/share/haproxy/certs
     networks:
       - logger-network
@@ -45,7 +45,7 @@ services:
     networks:
       - logger-network
     depends_on:
-      - haproxy
+      - elastic-lb
     restart: unless-stopped
 
   # r-proxy-actix
@@ -89,7 +89,7 @@ services:
     networks:
       - logger-network
     depends_on:
-      haproxy:
+      elastic-lb:
         condition: service_healthy
 
   log-forwarding-api-2:
@@ -351,9 +351,8 @@ services:
       timeout: 10s
       retries: 120
     depends_on:
-      haproxy:
+      elastic-lb:
         condition: service_healthy
-
 
   log-gen:
     build:
