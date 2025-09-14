@@ -12,11 +12,11 @@ use actix_web::{
 use dotenvy::dotenv;
 use elastic::{
     create_client, create_container_log_mapping, create_log_mapping, create_logs_index, get_nodes,
-    query_logs, search_logs, send_document,
+    query_logs, search_logs, send_document, query_container_logs, search_container_logs,
 };
 use elasticsearch::Elasticsearch;
 use log_entry::{ContainerLogEntry, LogEntry};
-use query_structures::{LogQuery, SearchQuery};
+use query_structures::{LogQuery, SearchQuery, ContainerLogQuery, ContainerSearchQuery};
 use std::env;
 use uuid::Uuid;
 
@@ -100,6 +100,30 @@ async fn search_logs_endpoint(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "logs": logs })))
 }
 
+#[get("/container-logs")]
+async fn get_container_logs(
+    data: web::Data<AppState>,
+    query: web::Query<ContainerLogQuery>,
+) -> ActixResult<HttpResponse> {
+    let logs = query_container_logs(&data.container_logs_index_name, &data.client, &query)
+        .await
+        .map_err(ErrorInternalServerError)?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "logs": logs })))
+}
+
+#[get("/container-logs/search")]
+async fn search_container_logs_endpoint(
+    data: web::Data<AppState>,
+    query: web::Query<ContainerSearchQuery>,
+) -> ActixResult<HttpResponse> {
+    let logs = search_container_logs(&data.container_logs_index_name, &data.client, &query)
+        .await
+        .map_err(ErrorInternalServerError)?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "logs": logs })))
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // Set DEPLOYMENT=PROD in docker compose!
@@ -155,6 +179,8 @@ async fn main() -> std::io::Result<()> {
             .service(send_container_log)
             .service(get_logs)
             .service(search_logs_endpoint)
+            .service(get_container_logs)
+            .service(search_container_logs_endpoint)
             .wrap(Logger::default())
     })
     .bind(("0.0.0.0", 8080))?

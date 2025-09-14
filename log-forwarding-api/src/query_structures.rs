@@ -17,3 +17,19 @@ pub struct SearchQuery {
     pub limit: Option<usize>,
     pub offset: Option<usize>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct ContainerLogQuery {
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+    pub container_name: Option<String>,
+    pub from: Option<DateTime<Utc>>,
+    pub to: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ContainerSearchQuery {
+    pub query: String,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}

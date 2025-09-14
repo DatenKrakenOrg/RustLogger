@@ -109,12 +109,18 @@ async fn run_app<B: Backend>(
                             KeyCode::Char('a') => {
                                 app.toggle_auto_refresh();
                             }
-                            KeyCode::Char('c') => {
+                             KeyCode::Char('c') => {
                                 app.clear_search();
                                 if let Err(e) = app.refresh_logs().await {
                                     app.error_message = Some(format!("Refresh failed: {}", e));
                                 }
                             }
+                             KeyCode::Char('i') => {
+                                 app.switch_index();
+                                 if let Err(e) = app.refresh_logs().await {
+                                     app.error_message = Some(format!("Refresh failed: {}", e));
+                                 }
+                             }
                              KeyCode::Enter => {
                                  app.enter_details_mode();
                              }

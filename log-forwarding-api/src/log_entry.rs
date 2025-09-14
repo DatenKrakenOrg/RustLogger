@@ -23,9 +23,9 @@ impl ElasticLogDocument for LogEntry {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ContainerLogEntry {
-    timestamp: DateTime<Utc>,
-    container_name: String,
-    log_message: String,
+    pub timestamp: DateTime<Utc>,
+    pub container_name: String,
+    pub log_message: String,
 }
 
 impl ElasticLogDocument for ContainerLogEntry {

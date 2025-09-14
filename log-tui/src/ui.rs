@@ -1,4 +1,4 @@
-use crate::app::{App, Mode, SortDirection, SortField};
+use crate::app::{App, Mode, SortDirection, SortField, IndexType, LogEntryType};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -37,7 +37,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 fn draw_header(f: &mut Frame, area: Rect, app: &App) {
     let title = match app.mode {
         Mode::Auth => "Authentication",
-        Mode::Normal => "Log Viewer",
+        Mode::Normal => app.current_index_type.display_name(),
         Mode::Search => "Search Mode",
         Mode::Limit => "Limit Mode",
         Mode::Details => "Log Details",
@@ -53,7 +53,7 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
         " [Auto-refresh OFF] ".to_string()
     };
 
-    let last_refresh_text = format!(" | Last refresh: {}", 
+    let _last_refresh_text = format!(" | Last refresh: {}", 
         app.last_refresh.elapsed().as_secs() / 60,
     );
     let last_refresh_display = if app.last_refresh.elapsed().as_secs() < 60 {
@@ -62,15 +62,8 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
         format!(" | Last refresh: {}m ago", app.last_refresh.elapsed().as_secs() / 60)
     };
 
-    let header = Paragraph::new(Line::from(vec![
-        Span::styled(title, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Span::raw(" | "),
-        Span::styled(
-            format!("{}/{} logs", app.logs.len(), app.log_limit),
-            Style::default().fg(Color::Green),
-        ),
-        Span::raw(" | "),
-        Span::styled(
+    let sort_text = match app.current_index_type {
+        IndexType::Logs => {
             format!("Sort: {} {}", 
                 match app.sort_state.field {
                     SortField::Timestamp => "Time",
@@ -83,9 +76,34 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
                     SortDirection::Ascending => "↑",
                     SortDirection::Descending => "↓",
                 }
-            ),
-            Style::default().fg(Color::Magenta),
+            )
+        }
+        IndexType::ContainerLogs => {
+            format!("Sort: {} {}", 
+                match app.sort_state.field {
+                    SortField::Timestamp => "Time",
+                    SortField::Device => "Container",
+                    // For container logs, only Time and Container are valid
+                    // If somehow we get other fields, default to Time but this shouldn't happen
+                    _ => "Time",
+                },
+                match app.sort_state.direction {
+                    SortDirection::Ascending => "↑",
+                    SortDirection::Descending => "↓",
+                }
+            )
+        }
+    };
+
+    let header = Paragraph::new(Line::from(vec![
+        Span::styled(title, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::raw(" | "),
+        Span::styled(
+            format!("{}/{} logs", app.logs.len(), app.log_limit),
+            Style::default().fg(Color::Green),
         ),
+        Span::raw(" | "),
+        Span::styled(sort_text, Style::default().fg(Color::Magenta)),
         Span::styled(status_text, Style::default().fg(Color::Yellow)),
         Span::styled(last_refresh_display, Style::default().fg(Color::LightBlue)),
     ]))
@@ -119,35 +137,56 @@ fn draw_logs(f: &mut Frame, area: Rect, app: &mut App) {
         .iter()
         .enumerate()
         .map(|(i, log)| {
-            let level_color = app.get_log_level_color(&log.level);
-            let timestamp = log.timestamp.format("%Y-%m-%d %H:%M:%S").to_string();
-            let level_str = format!("{:?}", log.level);
-            
-            let content = Line::from(vec![
-                Span::styled(
-                    format!("{:<19}", timestamp),
-                    Style::default().fg(Color::Gray),
-                ),
-                Span::raw(" "),
-                Span::styled(
-                    format!("{:<8}", level_str),
-                    Style::default().fg(level_color).add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(" "),
-                Span::styled(
-                    format!("{:<15}", log.msg.device),
-                    Style::default().fg(Color::Magenta),
-                ),
-                Span::raw(" "),
-                Span::styled(
-                    format!("T:{:.1}°C H:{:.1}% ",
-                        log.temperature,
-                        log.humidity
-                    ),
-                    Style::default().fg(Color::Blue),
-                ),
-                Span::raw(log.msg.msg.clone()),
-            ]);
+            let content = match log {
+                LogEntryType::Regular(log_entry) => {
+                    let level_color = app.get_log_level_color(&log_entry.level);
+                    let timestamp = log_entry.timestamp.format("%Y-%m-%d %H:%M:%S").to_string();
+                    let level_str = format!("{:?}", log_entry.level);
+                    
+                    Line::from(vec![
+                        Span::styled(
+                            format!("{:<19}", timestamp),
+                            Style::default().fg(Color::Gray),
+                        ),
+                        Span::raw(" "),
+                        Span::styled(
+                            format!("{:<8}", level_str),
+                            Style::default().fg(level_color).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::raw(" "),
+                        Span::styled(
+                            format!("{:<15}", log_entry.msg.device),
+                            Style::default().fg(Color::Magenta),
+                        ),
+                        Span::raw(" "),
+                        Span::styled(
+                            format!("T:{:.1}°C H:{:.1}% ",
+                                log_entry.temperature,
+                                log_entry.humidity
+                            ),
+                            Style::default().fg(Color::Blue),
+                        ),
+                        Span::raw(log_entry.msg.msg.clone()),
+                    ])
+                }
+                LogEntryType::Container(log_entry) => {
+                    let timestamp = log_entry.timestamp.format("%Y-%m-%d %H:%M:%S").to_string();
+                    
+                    Line::from(vec![
+                        Span::styled(
+                            format!("{:<19}", timestamp),
+                            Style::default().fg(Color::Gray),
+                        ),
+                        Span::raw(" "),
+                        Span::styled(
+                            format!("{:<20}", log_entry.container_name),
+                            Style::default().fg(Color::Magenta),
+                        ),
+                        Span::raw(" "),
+                        Span::raw(log_entry.log_message.clone()),
+                    ])
+                }
+            };
 
             let style = if i == app.selected_index {
                 Style::default().bg(Color::DarkGray)
@@ -181,7 +220,7 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
             "Enter your API key | Enter: Authenticate | q: Quit"
         }
         Mode::Normal => {
-            "↑/↓: Navigate | Enter: Details | /: Search | f: Sort field | o: Sort order | l: Limit | r: Refresh | a: Auto-refresh | c: Clear | q: Quit"
+            "↑/↓: Navigate | Enter: Details | /: Search | f: Sort field | o: Sort order | l: Limit | r: Refresh | a: Auto-refresh | c: Clear | i: Switch index | q: Quit"
         }
         Mode::Search => {
             "Type search query | Enter: Execute search | Esc: Cancel"
@@ -236,40 +275,62 @@ fn draw_detail_popup(f: &mut Frame, app: &App) {
         let area = centered_rect(80, 50, f.size());
         f.render_widget(Clear, area);
 
-        let timestamp = log.timestamp.format("%Y-%m-%d %H:%M:%S UTC").to_string();
-        let level_str = format!("{:?}", log.level);
-        let level_color = app.get_log_level_color(&log.level);
+        let content = match log {
+            LogEntryType::Regular(log_entry) => {
+                let timestamp = log_entry.timestamp.format("%Y-%m-%d %H:%M:%S UTC").to_string();
+                let level_str = format!("{:?}", log_entry.level);
+                let level_color = app.get_log_level_color(&log_entry.level);
 
-        let content = Text::from(vec![
-            Line::from(vec![
-                Span::styled("Timestamp: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(timestamp),
-            ]),
-            Line::from(vec![
-                Span::styled("Level: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::styled(level_str, Style::default().fg(level_color)),
-            ]),
-            Line::from(vec![
-                Span::styled("Device: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::styled(log.msg.device.clone(), Style::default().fg(Color::Magenta)),
-            ]),
-            Line::from(vec![
-                Span::styled("Temperature: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::styled(format!("{:.2}°C", log.temperature), Style::default().fg(Color::Blue)),
-            ]),
-            Line::from(vec![
-                Span::styled("Humidity: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::styled(format!("{:.2}%", log.humidity), Style::default().fg(Color::Blue)),
-            ]),
-            Line::from(vec![
-                Span::styled("Message: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(log.msg.msg.clone()),
-            ]),
-            Line::from(vec![
-                Span::styled("Exceeded Values: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(format!("{:?}", log.msg.exceeded_values)),
-            ]),
-        ]);
+                Text::from(vec![
+                    Line::from(vec![
+                        Span::styled("Timestamp: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::raw(timestamp),
+                    ]),
+                    Line::from(vec![
+                        Span::styled("Level: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled(level_str, Style::default().fg(level_color)),
+                    ]),
+                    Line::from(vec![
+                        Span::styled("Device: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled(log_entry.msg.device.clone(), Style::default().fg(Color::Magenta)),
+                    ]),
+                    Line::from(vec![
+                        Span::styled("Temperature: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("{:.2}°C", log_entry.temperature), Style::default().fg(Color::Blue)),
+                    ]),
+                    Line::from(vec![
+                        Span::styled("Humidity: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("{:.2}%", log_entry.humidity), Style::default().fg(Color::Blue)),
+                    ]),
+                    Line::from(vec![
+                        Span::styled("Message: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::raw(log_entry.msg.msg.clone()),
+                    ]),
+                    Line::from(vec![
+                        Span::styled("Exceeded Values: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::raw(format!("{:?}", log_entry.msg.exceeded_values)),
+                    ]),
+                ])
+            }
+            LogEntryType::Container(log_entry) => {
+                let timestamp = log_entry.timestamp.format("%Y-%m-%d %H:%M:%S UTC").to_string();
+
+                Text::from(vec![
+                    Line::from(vec![
+                        Span::styled("Timestamp: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::raw(timestamp),
+                    ]),
+                    Line::from(vec![
+                        Span::styled("Container: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled(log_entry.container_name.clone(), Style::default().fg(Color::Magenta)),
+                    ]),
+                    Line::from(vec![
+                        Span::styled("Message: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::raw(log_entry.log_message.clone()),
+                    ]),
+                ])
+            }
+        };
 
         let detail = Paragraph::new(content)
             .block(Block::default().borders(Borders::ALL).title("Log Details"))
