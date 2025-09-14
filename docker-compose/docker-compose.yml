@@ -51,10 +51,10 @@ services:
   # r-proxy-actix
   log-forwarding-lb:
     build:
-      context: ../r-proxy-actix/nginx
+      context: ./log-forwarding-lb
       dockerfile: Dockerfile
     volumes:
-      - ../r-proxy-actix/nginx/nginx.template:/etc/nginx/conf.d/nginx.template
+      - ./log-forwarding-lb/nginx.template:/etc/nginx/conf.d/nginx.template
     container_name: log-forwarding-lb
     ports:
       - 8080:80
@@ -75,7 +75,7 @@ services:
 
   log-forwarding-api-1:
     build:
-      context: ../r-proxy-actix/log-forwarding-api
+      context: ../log-forwarding-api
       dockerfile: Dockerfile
     env_file: .env
     container_name: log-forwarding-api-1
@@ -94,7 +94,7 @@ services:
 
   log-forwarding-api-2:
     build:
-      context: ../r-proxy-actix/log-forwarding-api
+      context: ../log-forwarding-api
       dockerfile: Dockerfile
     container_name: log-forwarding-api-2
     env_file: .env
@@ -113,7 +113,7 @@ services:
 
   log-forwarding-api-3:
     build:
-      context: ../r-proxy-actix/log-forwarding-api
+      context: ../log-forwarding-api
       dockerfile: Dockerfile
     container_name: log-forwarding-api-3
     env_file: .env
