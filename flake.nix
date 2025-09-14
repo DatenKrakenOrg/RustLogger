@@ -24,6 +24,7 @@
           pkg-config
           rustup
           dockerfmt
+          nodejs
           lazydocker
         ];
 

@@ -1,5 +1,5 @@
-ARG RUST_VERSION=latest
-ARG APP_NAME=log-forwarding-api
+ARG RUST_VERSION=1.89.0
+ARG APP_NAME=log-sender
 
 FROM rust:${RUST_VERSION} AS builder
 ARG APP_NAME
@@ -34,13 +34,12 @@ EOF
 FROM bitnami/minideb:bookworm
 
 # add dependencies for run-container
-RUN apt-get update && apt-get install -y libssl-dev curl
+RUN apt-get update && apt-get install -y libssl-dev
 
 WORKDIR /app
 
+COPY --from=builder /code/target/release/log-sender log-sender
+
 USER 1001
 
-EXPOSE 8080
-
-COPY --from=builder /code/target/release/log-forwarding-api log-forwarding-api
-CMD ["/app/log-forwarding-api"]
+CMD ["/app/log-sender"]

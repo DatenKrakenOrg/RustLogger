@@ -1,5 +1,5 @@
-ARG RUST_VERSION=latest
-ARG APP_NAME=log_sender
+ARG RUST_VERSION=1.89.0
+ARG APP_NAME=log-generator
 
 FROM rust:${RUST_VERSION} AS builder
 ARG APP_NAME
@@ -31,15 +31,20 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry <<EOF
 EOF
 
 # Actual container
-FROM bitnami/minideb:bookworm
-
+FROM ubuntu:24.04
+ARG APP_NAME
 # add dependencies for run-container
-RUN apt-get update && apt-get install -y libssl-dev
+RUN apt-get update && apt-get install -y libssl-dev 
 
 WORKDIR /app
 
-COPY --from=builder /code/target/release/log_sender log_sender
+COPY --from=builder /code/target/release/${APP_NAME} ${APP_NAME}
 
-USER 1001
+RUN useradd -ms /bin/bash rust-log-user
+RUN mkdir /etc/logs
+RUN chown -R rust-log-user:rust-log-user /etc/logs
+USER rust-log-user
 
-CMD ["/app/log_sender"]
+# What the container should run when it is started.
+
+CMD ["/app/log-generator" ,"-p","/etc/logs/logs.csv"]
