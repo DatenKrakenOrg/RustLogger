@@ -1,4 +1,4 @@
-ARG RUST_VERSION=latest
+ARG RUST_VERSION=1.89.0
 ARG APP_NAME=container-log-collector
 
 FROM rust:${RUST_VERSION} AS builder
