@@ -1217,6 +1217,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
+name = "log-generator"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "polars",
+ "rand 0.9.1",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lru-slab"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2273,18 +2285,6 @@ dependencies = [
  "byteorder",
  "rmp",
  "serde",
-]
-
-[[package]]
-name = "rust-logger"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "polars",
- "rand 0.9.1",
- "serde",
- "serde_json",
 ]
 
 [[package]]

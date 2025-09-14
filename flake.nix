@@ -23,7 +23,6 @@
           lazygit
           pkg-config
           rustup
-          dockerfmt
           nodejs
           lazydocker
         ];
