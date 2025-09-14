@@ -4,7 +4,7 @@ upstream log-forwarding {
     server log-forwarding-api-3:8080 max_fails=3 fail_timeout=10s;
     keepalive 32;
 }
-limit_req_zone $binary_remote_addr zone=load_metering:10m rate=1000r/s;
+limit_req_zone $binary_remote_addr zone=load_metering:10m rate=10000r/s;
 server {
     listen 80;
 
