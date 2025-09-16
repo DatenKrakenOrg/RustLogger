@@ -1,7 +1,4 @@
-networks:
-  logger-network:
-    driver: bridge
-
+name: "rustlogger"
 services:
   container-log-collector-1:
     build:
@@ -11,13 +8,13 @@ services:
     env_file: .env
     networks:
       - logger-network
+    restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "nc -z -u localhost 5050 || exit 1" ]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 30s
-    restart: unless-stopped
     logging:
       driver: syslog
       options:
@@ -30,16 +27,15 @@ services:
       dockerfile: Dockerfile
     container_name: container-log-collector-2
     env_file: .env
-
     networks:
       - logger-network
+    restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "nc -z -u localhost 5050 || exit 1" ]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 30s
-    restart: unless-stopped
     logging:
       driver: syslog
       options:
@@ -52,62 +48,54 @@ services:
       dockerfile: Dockerfile
     container_name: container-log-collector-3
     env_file: .env
-
     networks:
       - logger-network
+    restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "nc -z -u localhost 5050 || exit 1" ]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 30s
-    restart: unless-stopped
     logging:
       driver: syslog
       options:
         syslog-address: "udp://localhost:5050"
         tag: "container-log-collector-3"
 
-
   container-log-lb:
     build:
       context: ./container-log-lb
       dockerfile: Dockerfile
-    ports:
-      - "5050:5050/udp"
+    container_name: container-log-lb
+    depends_on:
+      container-log-collector-1:
+        condition: service_healthy
+      container-log-collector-2:
+        condition: service_healthy
+      container-log-collector-3:
+        condition: service_healthy
     env_file: .env
+    ports:
+      - '5050:5050/udp'
     networks:
       - logger-network
-    container_name: container-log-lb
     restart: unless-stopped
-    depends_on:
-        container-log-collector-1:
-            condition: service_healthy
-        container-log-collector-2:
-            condition: service_healthy
-        container-log-collector-3:
-            condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl --ipv4 -fsS http://127.0.0.1/health -o /dev/null"]
+      test: [ "CMD-SHELL", "curl --ipv4 -fsS http://localhost/health -o /dev/null" ]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 10s
 
-  haproxy:
+  elastic-lb:
     build:
-      context: ./haproxy/
+      context: ./elastic-lb/
       dockerfile: Dockerfile
-    container_name: haproxy
-    ports:
-      - "9200:9200" # Expose HAProxy for Elasticsearch
-      - "8404:8404" # Expose HAProxy stats/healtz page
-    volumes:
-      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-      - certs:/usr/share/haproxy/certs
-    networks:
-      - logger-network
+    container_name: elastic-lb
     depends_on:
+      elasticsetup:
+        condition: service_completed_successfully
       es01:
         condition: service_healthy
       es02:
@@ -116,50 +104,19 @@ services:
         condition: service_healthy
       es04:
         condition: service_healthy
-      elasticsetup:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8404/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    restart: unless-stopped
-
-  metricbeat:
-    image: docker.elastic.co/beats/metricbeat:8.19.0
-    container_name: metricbeat
-    env_file: .env
+      es05:
+        condition: service_healthy
     volumes:
-      - ./metricbeat/metricbeat.yml:/usr/share/metricbeat/metricbeat.yml:ro
-      - certs:/usr/share/metricbeat/certs
-    networks:
-      - logger-network
-    depends_on:
-      - haproxy
-    restart: unless-stopped
-
-  # r-proxy-actix
-  log-forwarding-lb:
-    build:
-      context: ../r-proxy-actix/nginx
-      dockerfile: Dockerfile
-    volumes:
-      - ../r-proxy-actix/nginx/nginx.template:/etc/nginx/conf.d/nginx.template
-    container_name: log-forwarding-lb
+      - ./elastic-lb/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - certs:/usr/share/haproxy/certs
     ports:
-      - 8080:80
-    env_file: .env
+      - '8404:8404' # Expose elastic-lb stats/healtz page
+      - '9200:9200' # Expose elastic-lb for Elasticsearch
     networks:
       - logger-network
     restart: unless-stopped
-    command: /bin/ash -c "envsubst '$${SECRET_API_KEY}' < /etc/nginx/conf.d/nginx.template > /etc/nginx/conf.d/default.conf && cat /etc/nginx/conf.d/default.conf && nginx -g' daemon off;'"
-    depends_on:
-      log-forwarding-api-3:
-        condition: service_healthy
-
     healthcheck:
-      test: ["CMD-SHELL", "curl --ipv4 -fsS http://127.0.0.1/health -o /dev/null"]
+      test: [ "CMD", "curl", "--fail", "http://localhost:8404/healthz" ]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -168,92 +125,19 @@ services:
       driver: syslog
       options:
         syslog-address: "udp://localhost:5050"
-        tag: "log-forwarding-lb"
+        tag: "elastic-lb"
 
-  log-forwarding-api-1:
-    build:
-      context: ../r-proxy-actix/log-forwarding-api
-      dockerfile: Dockerfile
-    env_file: .env
-    container_name: log-forwarding-api-1
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/whoareyou"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - logger-network
-    depends_on:
-      haproxy:
-        condition: service_healthy
-    logging:
-      driver: syslog
-      options:
-        syslog-address: "udp://localhost:5050"
-        tag: "log-forwarding-api-1"
-
-
-  log-forwarding-api-2:
-    build:
-      context: ../r-proxy-actix/log-forwarding-api
-      dockerfile: Dockerfile
-    container_name: log-forwarding-api-2
-    env_file: .env
-    restart: unless-stopped
-    networks:
-      - logger-network
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/whoareyou"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    depends_on:
-      log-forwarding-api-1:
-          condition: service_healthy
-    logging:
-      driver: syslog
-      options:
-        syslog-address: "udp://localhost:5050"
-        tag: "log-forwarding-api-2"
-
-
-  log-forwarding-api-3:
-    build:
-      context: ../r-proxy-actix/log-forwarding-api
-      dockerfile: Dockerfile
-    container_name: log-forwarding-api-3
-    env_file: .env
-    restart: unless-stopped
-    networks:
-      - logger-network
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/whoareyou"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    depends_on:
-      log-forwarding-api-2:
-          condition: service_healthy
-    logging:
-      driver: syslog
-      options:
-        syslog-address: "udp://localhost:5050"
-        tag: "log-forwarding-api-3"
-
-  # elastic-stack
   elasticsetup:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     container_name: elasicsetup
-    networks:
-      - logger-network
-    env_file: .env
+    depends_on:
+      container-log-lb:
+        condition: service_healthy
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
-    user: "0"
+    env_file: .env
+    networks:
+      - logger-network
     command: >
       bash -c '
         if [ x${ELASTIC_PASSWORD} == x ]; then
@@ -290,12 +174,18 @@ services:
           "      - localhost\n"\
           "    ip:\n"\
           "      - 127.0.0.1\n"\
-          "  - name: es04\n"\
-          "    dns:\n"\
-          "      - es04\n"\
-          "      - localhost\n"\
-          "    ip:\n"\
-          "      - 127.0.0.1\n"\
+           "  - name: es04\n"\
+           "    dns:\n"\
+           "      - es04\n"\
+           "      - localhost\n"\
+           "    ip:\n"\
+           "      - 127.0.0.1\n"\
+           "  - name: es05\n"\
+           "    dns:\n"\
+           "      - es05\n"\
+           "      - localhost\n"\
+           "    ip:\n"\
+           "      - 127.0.0.1\n"\
           > config/certs/instances.yml;
           bin/elasticsearch-certutil cert --silent --pem -out config/certs/certs.zip --in config/certs/instances.yml --ca-cert config/certs/ca/ca.crt --ca-key config/certs/ca/ca.key;
           unzip config/certs/certs.zip -d config/certs;
@@ -311,47 +201,34 @@ services:
         echo "All done!";
       '
     healthcheck:
-      test: ["CMD-SHELL", "[ -f config/certs/es01/es01.crt ]"]
+      test: [ "CMD-SHELL", "[ -f config/certs/es01/es01.crt ]" ]
       interval: 1s
       timeout: 5s
       retries: 120
-    depends_on:
-      container-log-lb:
-        condition: service_healthy
     logging:
       driver: syslog
       options:
         syslog-address: "udp://localhost:5050"
         tag: "elasticsetup"
+    user: "0"
 
   es01:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    container_name: es01
     depends_on:
       elasticsetup:
         condition: service_healthy
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
-    container_name: es01
-    env_file: .env
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
       - esdata01:/usr/share/elasticsearch/data
       - ./elasticsearch/es01.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
-    #ports:
-    #   - ${ES_PORT}:9200
-    networks:
-      - logger-network
     environment:
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
-    mem_limit: ${MEM_LIMIT}
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
+    env_file: .env
+    networks:
+      - logger-network
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "curl -s --cacert config/certs/ca/ca.crt -u \"$ELASTIC_USERNAME:$ELASTIC_PASSWORD\" http://localhost:9200/_cluster/health?wait_for_status=green&timeout=10s && curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials' || exit 1",
-        ]
+      test: [ "CMD-SHELL", "curl -s --cacert config/certs/ca/ca.crt -u \"$ELASTIC_USERNAME:$ELASTIC_PASSWORD\" http://localhost:9200/_cluster/health?wait_for_status=green&timeout=10s && curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials' || exit 1" ]
       interval: 10s
       timeout: 10s
       retries: 120
@@ -361,33 +238,29 @@ services:
       options:
         syslog-address: "udp://localhost:5050"
         tag: "es01"
-
-  es02:
-    depends_on:
-      elasticsetup:
-        condition: service_healthy
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
-    container_name: es02
-    env_file: .env
-    volumes:
-      - certs:/usr/share/elasticsearch/config/certs
-      - esdata02:/usr/share/elasticsearch/data
-      - ./elasticsearch/es02.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
-    networks:
-      - logger-network
-    environment:
-      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
     mem_limit: ${MEM_LIMIT}
     ulimits:
       memlock:
         soft: -1
         hard: -1
+
+  es02:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    container_name: es02
+    depends_on:
+      elasticsetup:
+        condition: service_healthy
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+      - esdata02:/usr/share/elasticsearch/data
+      - ./elasticsearch/es02.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    environment:
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+    env_file: .env
+    networks:
+      - logger-network
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "curl -s --cacert config/certs/ca/ca.crt -u \"$ELASTIC_USERNAME:$ELASTIC_PASSWORD\" http://localhost:9200/_cluster/health?wait_for_status=green&timeout=10s && curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials' || exit 1",
-        ]
+      test: [ "CMD-SHELL", "curl -s --cacert config/certs/ca/ca.crt -u \"$ELASTIC_USERNAME:$ELASTIC_PASSWORD\" http://localhost:9200/_cluster/health?wait_for_status=green&timeout=10s && curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials' || exit 1" ]
       interval: 10s
       timeout: 10s
       retries: 120
@@ -397,34 +270,29 @@ services:
       options:
         syslog-address: "udp://localhost:5050"
         tag: "es02"
-
-  es03:
-    depends_on:
-      elasticsetup:
-        condition: service_healthy
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
-    container_name: es03
-    env_file: .env
-    volumes:
-      - certs:/usr/share/elasticsearch/config/certs
-      - esdata03:/usr/share/elasticsearch/data
-      - ./elasticsearch/es03.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
-    networks:
-      - logger-network
-    environment:
-      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
     mem_limit: ${MEM_LIMIT}
     ulimits:
       memlock:
         soft: -1
         hard: -1
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "curl -s --cacert config/certs/ca/ca.crt -u \"$ELASTIC_USERNAME:$ELASTIC_PASSWORD\" http://localhost:9200/_cluster/health?wait_for_status=green&timeout=10s && curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials' || exit 1",
 
-        ]
+  es03:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    container_name: es03
+    depends_on:
+      elasticsetup:
+        condition: service_healthy
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+      - esdata03:/usr/share/elasticsearch/data
+      - ./elasticsearch/es03.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    environment:
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+    env_file: .env
+    networks:
+      - logger-network
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -s --cacert config/certs/ca/ca.crt -u \"$ELASTIC_USERNAME:$ELASTIC_PASSWORD\" http://localhost:9200/_cluster/health?wait_for_status=green&timeout=10s && curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials' || exit 1" ]
       interval: 10s
       timeout: 10s
       retries: 120
@@ -434,33 +302,29 @@ services:
       options:
         syslog-address: "udp://localhost:5050"
         tag: "es03"
-
-  es04:
-    depends_on:
-      elasticsetup:
-        condition: service_healthy
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
-    container_name: es04
-    env_file: .env
-    volumes:
-      - certs:/usr/share/elasticsearch/config/certs
-      - esdata04:/usr/share/elasticsearch/data
-      - ./elasticsearch/es04.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
-    networks:
-      - logger-network
-    environment:
-      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
     mem_limit: ${MEM_LIMIT}
     ulimits:
       memlock:
         soft: -1
         hard: -1
+
+  es04:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    container_name: es04
+    depends_on:
+      elasticsetup:
+        condition: service_healthy
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+      - esdata04:/usr/share/elasticsearch/data
+      - ./elasticsearch/es04.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    environment:
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+    env_file: .env
+    networks:
+      - logger-network
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "curl -s --cacert config/certs/ca/ca.crt -u \"$ELASTIC_USERNAME:$ELASTIC_PASSWORD\" http://localhost:9200/_cluster/health?wait_for_status=green&timeout=10s && curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials' || exit 1",
-        ]
+      test: [ "CMD-SHELL", "curl -s --cacert config/certs/ca/ca.crt -u \"$ELASTIC_USERNAME:$ELASTIC_PASSWORD\" http://localhost:9200/_cluster/health?wait_for_status=green&timeout=10s && curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials' || exit 1" ]
       interval: 10s
       timeout: 10s
       retries: 120
@@ -470,43 +334,177 @@ services:
       options:
         syslog-address: "udp://localhost:5050"
         tag: "es04"
+    mem_limit: ${MEM_LIMIT}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  es05:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    container_name: es05
+    depends_on:
+      elasticsetup:
+        condition: service_healthy
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+      - esdata05:/usr/share/elasticsearch/data
+      - ./elasticsearch/es05.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    environment:
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+    env_file: .env
+    networks:
+      - logger-network
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -s --cacert config/certs/ca/ca.crt -u \"$ELASTIC_USERNAME:$ELASTIC_PASSWORD\" http://localhost:9200/_cluster/health?wait_for_status=green&timeout=10s && curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials' || exit 1" ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+      start_period: 20s
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "es05"
+    mem_limit: ${MEM_LIMIT}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.19.0
     container_name: kibana
-    env_file: .env
-    networks:
-      - logger-network
+    depends_on:
+      elastic-lb:
+        condition: service_healthy
     volumes:
       - certs:/usr/share/kibana/config/certs
       - kibanadata:/usr/share/kibana/data
       - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+    env_file: .env
     ports:
-       - 5601:5601
+      - '5601:5601'
+    networks:
+      - logger-network
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "curl -s -I http://localhost:5601 | grep -q 'HTTP/1.1 302 Found'",
-        ]
+      test: [ "CMD-SHELL", "curl -s -I http://localhost:5601 | grep -q 'HTTP/1.1 302 Found'" ]
       interval: 10s
       timeout: 10s
       retries: 120
-    depends_on:
-      haproxy:
-        condition: service_healthy
     logging:
       driver: syslog
       options:
         syslog-address: "udp://localhost:5050"
         tag: "kibana"
 
+  log-forwarding-api-1:
+    build:
+      context: ../log-forwarding-api
+      dockerfile: Dockerfile
+    container_name: log-forwarding-api-1
+    depends_on:
+      elastic-lb:
+        condition: service_healthy
+    env_file: .env
+    networks:
+      - logger-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/whoareyou" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "log-forwarding-api-1"
+
+  log-forwarding-api-2:
+    build:
+      context: ../log-forwarding-api
+      dockerfile: Dockerfile
+    container_name: log-forwarding-api-2
+    depends_on:
+      log-forwarding-api-1:
+        condition: service_healthy
+    env_file: .env
+    networks:
+      - logger-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/whoareyou" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "log-forwarding-api-2"
+
+  log-forwarding-api-3:
+    build:
+      context: ../log-forwarding-api
+      dockerfile: Dockerfile
+    container_name: log-forwarding-api-3
+    depends_on:
+      log-forwarding-api-2:
+        condition: service_healthy
+    env_file: .env
+    networks:
+      - logger-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/whoareyou" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "log-forwarding-api-3"
+
+  log-forwarding-lb:
+    build:
+      context: ./log-forwarding-lb
+      dockerfile: Dockerfile
+    container_name: log-forwarding-lb
+    depends_on:
+      log-forwarding-api-3:
+        condition: service_healthy
+    volumes:
+      - ./log-forwarding-lb/nginx.template:/etc/nginx/conf.d/nginx.template
+    env_file: .env
+    ports:
+      - '8080:80'
+    networks:
+      - logger-network
+    command: /bin/ash -c "envsubst '$${SECRET_API_KEY}' < /etc/nginx/conf.d/nginx.template > /etc/nginx/conf.d/default.conf && cat /etc/nginx/conf.d/default.conf && nginx -g' daemon off;'"
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "curl --ipv4 -fsS http://localhost/health -o /dev/null" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "log-forwarding-lb"
+
   log-gen:
     build:
       context: ../log-generator/
       dockerfile: Dockerfile
     container_name: log-gen
-    volumes: 
+    volumes:
       - logs:/etc/logs
     networks:
       - logger-network
@@ -520,8 +518,6 @@ services:
     build:
       context: ../log-sender/
       dockerfile: Dockerfile
-    #container_name: log-sender
-    env_file: .env
     depends_on:
       log-forwarding-lb:
         condition: service_healthy
@@ -529,6 +525,8 @@ services:
         condition: service_completed_successfully
     volumes:
       - logs:/etc/logs
+    #container_name: log-sender
+    env_file: .env
     networks:
       - logger-network
     logging:
@@ -536,6 +534,28 @@ services:
       options:
         syslog-address: "udp://localhost:5050"
         tag: "log-sender"
+
+  metricbeat:
+    image: docker.elastic.co/beats/metricbeat:8.19.0
+    container_name: metricbeat
+    depends_on:
+      - elastic-lb
+    volumes:
+      - ./metricbeat/metricbeat.yml:/usr/share/metricbeat/metricbeat.yml:ro
+      - certs:/usr/share/metricbeat/certs
+    env_file: .env
+    networks:
+      - logger-network
+    restart: unless-stopped
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://localhost:5050"
+        tag: "log-sender"
+
+networks:
+  logger-network:
+    driver: bridge
 
 volumes:
   certs:
@@ -548,6 +568,9 @@ volumes:
     driver: local
   esdata04:
     driver: local
+  esdata05:
+    driver: local
   kibanadata:
     driver: local
   logs:
+    driver: local

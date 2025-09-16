@@ -4,7 +4,7 @@ server.host: 0.0.0.0
 server.port: 5601
 
 # Elasticsearch connection
-elasticsearch.hosts: ["http://haproxy:9200"]
+elasticsearch.hosts: ["http://elastic-lb:9200"]
 elasticsearch.username: kibana_system
 elasticsearch.password: ${KIBANA_PASSWORD}
 

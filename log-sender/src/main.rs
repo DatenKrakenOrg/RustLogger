@@ -1,10 +1,9 @@
 use dotenv::dotenv;
+use polars::prelude::*;
+use polars::frame::row::Row;
 use reqwest;
 use reqwest::Error;
-use serde::Serialize;
-use std::fs::File;
-use std::io::{self, BufRead};
-use std::path::Path;
+use serde::{Deserialize, Serialize};
 use std::{env, f64};
 
 /// Configuration for the log sender application.
@@ -52,17 +51,25 @@ impl Config {
 }
 
 /// Inner message structure containing device information and exceeded threshold values.
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct InnerMsg {
     device: String,
     msg: String,
     exceeded_values: Vec<bool>,
 }
 
+/// Temporary structure to parse the JSON from CSV that matches the log generator's Message structure
+#[derive(Deserialize)]
+struct CsvMessage {
+    device: String,  // Device enum gets serialized as string
+    msg: String,
+    exceeded_values: [bool; 2],  // Array from log generator
+}
+
 /// Complete log entry structure for serialization to JSON.
 ///
 /// Represents a single log line parsed from the CSV file
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct LogEntry {
     timestamp: String, // Use String if the timestamp is coming as a string from `data.next()`
     level: String,
@@ -73,76 +80,94 @@ struct LogEntry {
 
 /// Main application entry point.
 ///
-/// Loads configuration and either runs endlessly or for a specified number of repetitions,
-/// processing the log file each time.
+/// Loads configuration, reads and parses the CSV file once, then either runs endlessly 
+/// or for a specified number of repetitions, sending the same log entries each time.
+/// This approach optimizes performance by avoiding repeated CSV parsing.
 #[tokio::main]
 async fn main() {
     let config = Config::load().expect("Failed to load environment variables");
 
+    let log_entries = process_file(&config);
+
     if config.endless {
         loop {
-            process_file(&config).await;
+            process_log_entries(&config, &log_entries).await;
         }
     } else {
         for _n in 0..config.repetitions {
-            process_file(&config).await;
+            process_log_entries(&config, &log_entries).await;
         }
     }
 }
 
-/// Processes the entire log file by reading each line and sending it to the endpoint.
+/// Reads and parses the entire log file into LogEntry structs.
 ///
-/// Creates an HTTP client, reads the log file, skips the first line (header),
-/// and sends each subsequent line to the configured endpoint.
+/// Uses Polars to properly parse CSV data including escaped quotes in JSON fields.
+/// Returns a vector of LogEntry structs that can be reused for multiple sends,
+/// avoiding the need to re-parse the CSV file on each iteration.
 ///
 /// # Arguments
-/// * `config` - Configuration containing file path and endpoint URL
-async fn process_file(config: &Config) {
+/// * `config` - Configuration containing file path
+///
+/// # Returns
+/// * `Vec<LogEntry>` - Vector of parsed log entries ready for sending
+fn process_file(config: &Config) -> Vec<LogEntry> {
+    
+    // Read CSV using Polars with proper escaping handling
+    let df = CsvReadOptions::default()
+            .with_has_header(true)
+            .try_into_reader_with_file_path(Some(config.logfile_path.clone().into()))
+            .expect("Failed to open CSV file")
+            .finish()
+            .expect("Failed to read CSV file");
+
+    
+    // Process all rows into LogEntry structs first
+    let mut log_entries = Vec::new();
+    for i in 0..df.height() {
+        let row = df.get_row(i).expect("Failed to get row");
+        let log_entry = create_log_entry(row);
+        log_entries.push(log_entry);
+    }
+
+    return log_entries;
+    
+}
+
+/// Sends all log entries to the configured HTTP endpoint.
+///
+/// Creates an HTTP client and sends each log entry sequentially to the endpoint.
+/// This function can be called multiple times with the same log entries for
+/// repeated sending scenarios (endless mode or multiple repetitions).
+///
+/// # Arguments
+/// * `config` - Configuration containing endpoint URL and API secret
+/// * `log_entries` - Vector of pre-created LogEntry structs to send
+async fn process_log_entries(config: &Config, log_entries: &Vec<LogEntry>) {
     let client = reqwest::Client::new();
-    let mut lines = read_lines(&config.logfile_path).unwrap();
-    lines.next();
-    // Consumes the iterator, returns an (Optional) String
-    for line in lines.map_while(Result::ok) {
-        send_value(&client, &config.endpoint,&config.secret, line)
+
+    // Then send each log entry
+    for log_entry in log_entries {
+        send_value(&client, &config.endpoint, &config.secret, log_entry.clone())
             .await
             .expect("Failed to establish a connection")
     }
 }
 
-/// Reads lines from a file and returns an iterator over them.
+/// Sends a single log entry to the HTTP endpoint.
 ///
-/// # Arguments
-/// * `filename` - Path to the file to read
-///
-/// # Returns
-/// * `io::Result<io::Lines<io::BufReader<File>>>` - Iterator over file lines or IO error
-fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
-where
-    P: AsRef<Path>,
-{
-    let file = File::open(filename)?;
-    Ok(io::BufReader::new(file).lines())
-}
-
-/// Sends a single log line to the HTTP endpoint.
-///
-/// Parses the CSV line into a LogEntry, serializes it to JSON, and sends it via POST.
-/// Prints the original line and response status. Handles HTTP errors gracefully.
+/// Serializes the LogEntry to JSON and sends it via POST.
+/// Prints the response status. Handles HTTP errors gracefully.
 ///
 /// # Arguments
 /// * `client` - HTTP client for making requests
 /// * `endpoint` - URL to send the log entry to
-/// * `line` - CSV line to parse and send
+/// * `secret` - API secret key for authentication
+/// * `log_entry` - Pre-created LogEntry ready for sending
 ///
 /// # Returns
 /// * `Result<(), Error>` - Ok if successful, Error if HTTP request fails
-async fn send_value(client: &reqwest::Client, endpoint: &str,secret:&str, line: String) -> Result<(), Error> {
-    let mut data = line.split(",");
-
-    println!("{}", line);
-
-    let log_entry = create_log_entry(&mut data);
-
+async fn send_value(client: &reqwest::Client, endpoint: &str, secret: &str, log_entry: LogEntry) -> Result<(), Error> {
     let res = client.post(endpoint).header("X-Api-Key", secret).json(&log_entry).send().await?;
 
     println!("{}", res.status());
@@ -157,31 +182,25 @@ async fn send_value(client: &reqwest::Client, endpoint: &str,secret:&str, line: 
     Ok(())
 }
 
-/// Creates a LogEntry from parsed CSV data.
+/// Creates a LogEntry from Polars Row data.
 ///
-/// Expects CSV data in the format: timestamp,level,humidity,temperature,device,msg,exceeded_values...
-/// Parses each field according to its expected type and constructs a complete LogEntry.
+/// Expects CSV data in the format: timestamp,level,temperature,humidity,msg
+/// where msg is a JSON string created by the log generator
 ///
 /// # Arguments
-/// * `data` - Iterator over CSV fields from a single line
+/// * `row` - Polars Row containing CSV fields
 ///
 /// # Returns
 /// * `LogEntry` - Structured log entry ready for serialization
-fn create_log_entry<'a>(data: &mut impl Iterator<Item = &'a str>) -> LogEntry {
-    let timestamp = data.next().unwrap().to_string();
-    let level = data.next().unwrap().to_string();
-    let humidity: f64 = data
-        .next()
-        .unwrap()
-        .parse()
-        .expect("Failed to parse humidity");
-    let temperature: f64 = data
-        .next()
-        .unwrap()
-        .parse()
-        .expect("Failed to parse temperature");
-    let message_parts: Vec<&str> = data.collect();
-    let msg: InnerMsg = get_message(&message_parts);
+fn create_log_entry(row: Row<'_>) -> LogEntry {
+    let timestamp = row.0[0].get_str().expect("Failed to get timestamp").to_string();
+    let level = row.0[1].get_str().expect("Failed to get level").to_string();
+    let temperature = row.0[2].try_extract::<f64>().expect("Failed to parse temperature");
+    let humidity = row.0[3].try_extract::<f64>().expect("Failed to parse humidity");
+    
+    // The last field is the JSON-serialized Message struct
+    let msg_json = row.0[4].get_str().expect("Failed to get msg");
+    let msg: InnerMsg = parse_message_json(msg_json);
 
     LogEntry {
         timestamp,
@@ -192,34 +211,35 @@ fn create_log_entry<'a>(data: &mut impl Iterator<Item = &'a str>) -> LogEntry {
     }
 }
 
-/// Creates an InnerMsg from remaining CSV fields.
+/// Parses a JSON string from CSV into InnerMsg.
 ///
-/// Parses the remaining CSV fields into device name, message text, and boolean exceeded values.
-/// Provides default values for missing fields to handle malformed CSV gracefully.
+/// The log generator serializes Message structs to JSON strings in the CSV.
+/// This function deserializes that JSON and converts it to the InnerMsg format expected by the API.
+/// Handles CSV-escaped JSON by unescaping double quotes before parsing.
 ///
 /// # Arguments
-/// * `data_collection` - Slice of remaining CSV fields after timestamp, level, humidity, temperature
+/// * `msg_json` - JSON string from CSV containing the serialized Message (may be CSV-escaped)
 ///
 /// # Returns
 /// * `InnerMsg` - Message structure with device info and exceeded threshold flags
-fn get_message(data_collection: &[&str]) -> InnerMsg {
-    let mut data = data_collection.iter();
-
-    // Extract the device name
-    let device = data.next().unwrap_or(&"Unknown").to_string();
-
-    // Extract the message
-    let msg = data.next().unwrap_or(&"No message").to_string();
-
-    // Extract exceeded values as booleans
-    let exceeded_values: Vec<bool> = data
-        .map(|&part| part.parse::<bool>().unwrap_or(false)) // Parse remaining parts as booleans
-        .collect();
-
-    // Create and return the InnerMsg instance
-    InnerMsg {
-        device,
-        msg,
-        exceeded_values,
+fn parse_message_json(msg_json: &str) -> InnerMsg {
+    // Handle CSV-escaped JSON by unescaping double quotes
+    let unescaped_json = msg_json.replace("\"\"", "\"");
+    
+    match serde_json::from_str::<CsvMessage>(&unescaped_json) {
+        Ok(csv_msg) => InnerMsg {
+            device: csv_msg.device,
+            msg: csv_msg.msg,
+            exceeded_values: csv_msg.exceeded_values.to_vec(), // Convert [bool; 2] to Vec<bool>
+        },
+        Err(e) => {
+            eprintln!("Failed to parse message JSON '{}': {}", unescaped_json, e);
+            // Fallback to default values
+            InnerMsg {
+                device: "Unknown".to_string(),
+                msg: "Failed to parse message".to_string(),
+                exceeded_values: vec![false, false],
+            }
+        }
     }
 }
