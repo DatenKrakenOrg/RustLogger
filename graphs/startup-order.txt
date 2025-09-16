@@ -1,69 +1,77 @@
-graph TD
-    Start([Start]) --> Phase1{Phase 1}
+@startuml
+title Docker Container Startup Sequence - RustLogger System
 
-    %% Phase 1: Container Log Collectors (parallel)
-    Phase1 --> CLC1[container-log-collector-1]
-    Phase1 --> CLC2[container-log-collector-2]
-    Phase1 --> CLC3[container-log-collector-3]
+!define RUSTTAG #CE422B
+!define ELASTICTAG #005571
+!define NGINXTAG #009639
+!define HAPROXYTAG #106DA9
+!define KIBANATAG #F04E98
+!define SETUPTAG #FFA500
 
-    %% Phase 2: Container Log Load Balancer
-    CLC1 --> CLB[container-log-lb]
-    CLC2 --> CLB
-    CLC3 --> CLB
+skinparam activity {
+  BackgroundColor White
+  BorderColor Black
+  FontColor Black
+  FontSize 12
+}
 
-    %% Phase 3: Elasticsearch Setup
-    CLB --> SETUP[elasticsetup]
+skinparam partition {
+  BackgroundColor #F8F9FA
+  BorderColor #6C757D
+  FontStyle bold
+}
 
-    %% Phase 4: Elasticsearch Nodes (parallel)
-    SETUP --> ES1[es01]
-    SETUP --> ES2[es02]
-    SETUP --> ES3[es03]
-    SETUP --> ES4[es04]
-    SETUP --> ES5[es05]
+start
 
-    %% Phase 5: Elastic Load Balancer
-    ES1 --> ELB[elastic-lb]
-    ES2 --> ELB
-    ES3 --> ELB
-    ES4 --> ELB
-    ES5 --> ELB
+fork 
+    :log-gen<color:RUSTTAG>;
 
-    %% Phase 6: Kibana and Log Forwarding API 1 (parallel)
-    ELB --> KIBANA[kibana]
-    ELB --> LFA1[log-forwarding-api-1]
+fork again
+partition "Phase 1: Log Collection Infrastructure" #LIGHTBLUE {
+  fork
+    :container-log-collector-1<color:RUSTTAG>;
+  fork again
+    :container-log-collector-2<color:RUSTTAG>;
+  fork again
+    :container-log-collector-3<color:RUSTTAG>;
+  end fork
 
-    %% Phase 7: Log Forwarding API 2
-    LFA1 --> LFA2[log-forwarding-api-2]
+:container-log-lb<color:NGINXTAG>;
+}
 
-    %% Phase 8: Log Forwarding API 3
-    LFA2 --> LFA3[log-forwarding-api-3]
 
-    %% Phase 9: Log Forwarding Load Balancer
-    LFA3 --> LLB[log-forwarding-lb]
 
-    %% Phase 10: Log Generation (parallel with Phase 9)
-    Phase1 --> LGEN[log-gen]
+partition "Phase 2: Elasticsearch Infrastructure" #LIGHTYELLOW {
+  :elasticsetup<color:SETUPTAG>;
 
-    %% Phase 11: Log Sender
-    LLB --> LSEND[log-sender]
-    LGEN --> LSEND
+  fork
+    :es01<color:ELASTICTAG>;
+  fork again
+    :es02<color:ELASTICTAG>;
+  fork again
+    :es03<color:ELASTICTAG>;
+  fork again
+    :es04<color:ELASTICTAG>;
+  fork again
+    :es05<color:ELASTICTAG>;
+  end fork
+ :elastic-lb<color:HAPROXYTAG>;
+}
 
-    %% Phase 12: Metricbeat
-    ELB --> METRICBEAT[metricbeat]
+partition "Phase 3: API Services" #LIGHTCORAL {
+    :log-forwarding-api-1<color:RUSTTAG>;
+fork
+  :log-forwarding-api-2<color:RUSTTAG>;
+fork again
+  :log-forwarding-api-3<color:RUSTTAG>;
+end fork
+  :log-forwarding-lb<color:NGINXTAG>;
+}
 
-    %% Color scheme
-    classDef rustComponent fill:#CE422B,stroke:#000,stroke-width:2px,color:#fff
-    classDef elasticComponent fill:#005571,stroke:#000,stroke-width:2px,color:#fff
-    classDef nginxComponent fill:#009639,stroke:#000,stroke-width:2px,color:#fff
-    classDef haproxyComponent fill:#106DA9,stroke:#000,stroke-width:2px,color:#fff
-    classDef kibanaComponent fill:#F04E98,stroke:#000,stroke-width:2px,color:#fff
-    classDef setupComponent fill:#FFA500,stroke:#000,stroke-width:2px,color:#fff
-    classDef phaseComponent fill:#E0E0E0,stroke:#000,stroke-width:1px,color:#000
+end fork
 
-    class CLC1,CLC2,CLC3,LFA1,LFA2,LFA3,LGEN,LSEND rustComponent
-    class ES1,ES2,ES3,ES4,ES5,METRICBEAT elasticComponent
-    class CLB,LLB nginxComponent
-    class ELB haproxyComponent
-    class KIBANA kibanaComponent
-    class SETUP setupComponent
-    class Start,Phase1 phaseComponent
+:log-sender<color:RUSTTAG>;
+
+:System Operational;
+stop
+@enduml
