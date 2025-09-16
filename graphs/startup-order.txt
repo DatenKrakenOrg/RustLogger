@@ -1,5 +1,5 @@
 @startuml
-title Docker Container Startup Sequence - RustLogger System
+title Docker Container Startup Sequence
 
 !define RUSTTAG #CE422B
 !define ELASTICTAG #005571
@@ -24,54 +24,54 @@ skinparam partition {
 start
 
 fork 
-    :log-gen<color:RUSTTAG>;
+    :Log Generator<color:RUSTTAG>;
 
 fork again
 partition "Phase 1: Log Collection Infrastructure" #LIGHTBLUE {
   fork
-    :container-log-collector-1<color:RUSTTAG>;
+    :Container Log Collector 1<color:RUSTTAG>;
   fork again
-    :container-log-collector-2<color:RUSTTAG>;
+    :Container Log Collector 2<color:RUSTTAG>;
   fork again
-    :container-log-collector-3<color:RUSTTAG>;
+    :Container Log Collector 3<color:RUSTTAG>;
   end fork
 
-:container-log-lb<color:NGINXTAG>;
+:Container Log Load Balancer<color:NGINXTAG>;
 }
 
 
 
 partition "Phase 2: Elasticsearch Infrastructure" #LIGHTYELLOW {
-  :elasticsetup<color:SETUPTAG>;
+  :Elasticsetup<color:SETUPTAG>;
 
   fork
-    :es01<color:ELASTICTAG>;
+    :Es01<color:ELASTICTAG>;
   fork again
-    :es02<color:ELASTICTAG>;
+    :Es02<color:ELASTICTAG>;
   fork again
-    :es03<color:ELASTICTAG>;
+    :Es03<color:ELASTICTAG>;
   fork again
-    :es04<color:ELASTICTAG>;
+    :Es04<color:ELASTICTAG>;
   fork again
-    :es05<color:ELASTICTAG>;
+    :Es05<color:ELASTICTAG>;
   end fork
- :elastic-lb<color:HAPROXYTAG>;
+ :Elastic Load Balancer<color:HAPROXYTAG>;
 }
 
 partition "Phase 3: API Services" #LIGHTCORAL {
-    :log-forwarding-api-1<color:RUSTTAG>;
+    :Log Forwarding Api 1<color:RUSTTAG>;
 fork
-  :log-forwarding-api-2<color:RUSTTAG>;
+  :Log Forwarding Api 2<color:RUSTTAG>;
 fork again
-  :log-forwarding-api-3<color:RUSTTAG>;
+  :Log Forwarding Api 3<color:RUSTTAG>;
 end fork
   :log-forwarding-lb<color:NGINXTAG>;
 }
 
 end fork
 
-:log-sender<color:RUSTTAG>;
+:Log Sender<color:RUSTTAG>;
 
-:System Operational;
+:System Ready;
 stop
 @enduml
