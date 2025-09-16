@@ -1,0 +1,69 @@
+graph TD
+    Start([Start]) --> Phase1{Phase 1}
+
+    %% Phase 1: Container Log Collectors (parallel)
+    Phase1 --> CLC1[container-log-collector-1]
+    Phase1 --> CLC2[container-log-collector-2]
+    Phase1 --> CLC3[container-log-collector-3]
+
+    %% Phase 2: Container Log Load Balancer
+    CLC1 --> CLB[container-log-lb]
+    CLC2 --> CLB
+    CLC3 --> CLB
+
+    %% Phase 3: Elasticsearch Setup
+    CLB --> SETUP[elasticsetup]
+
+    %% Phase 4: Elasticsearch Nodes (parallel)
+    SETUP --> ES1[es01]
+    SETUP --> ES2[es02]
+    SETUP --> ES3[es03]
+    SETUP --> ES4[es04]
+    SETUP --> ES5[es05]
+
+    %% Phase 5: Elastic Load Balancer
+    ES1 --> ELB[elastic-lb]
+    ES2 --> ELB
+    ES3 --> ELB
+    ES4 --> ELB
+    ES5 --> ELB
+
+    %% Phase 6: Kibana and Log Forwarding API 1 (parallel)
+    ELB --> KIBANA[kibana]
+    ELB --> LFA1[log-forwarding-api-1]
+
+    %% Phase 7: Log Forwarding API 2
+    LFA1 --> LFA2[log-forwarding-api-2]
+
+    %% Phase 8: Log Forwarding API 3
+    LFA2 --> LFA3[log-forwarding-api-3]
+
+    %% Phase 9: Log Forwarding Load Balancer
+    LFA3 --> LLB[log-forwarding-lb]
+
+    %% Phase 10: Log Generation (parallel with Phase 9)
+    Phase1 --> LGEN[log-gen]
+
+    %% Phase 11: Log Sender
+    LLB --> LSEND[log-sender]
+    LGEN --> LSEND
+
+    %% Phase 12: Metricbeat
+    ELB --> METRICBEAT[metricbeat]
+
+    %% Color scheme
+    classDef rustComponent fill:#CE422B,stroke:#000,stroke-width:2px,color:#fff
+    classDef elasticComponent fill:#005571,stroke:#000,stroke-width:2px,color:#fff
+    classDef nginxComponent fill:#009639,stroke:#000,stroke-width:2px,color:#fff
+    classDef haproxyComponent fill:#106DA9,stroke:#000,stroke-width:2px,color:#fff
+    classDef kibanaComponent fill:#F04E98,stroke:#000,stroke-width:2px,color:#fff
+    classDef setupComponent fill:#FFA500,stroke:#000,stroke-width:2px,color:#fff
+    classDef phaseComponent fill:#E0E0E0,stroke:#000,stroke-width:1px,color:#000
+
+    class CLC1,CLC2,CLC3,LFA1,LFA2,LFA3,LGEN,LSEND rustComponent
+    class ES1,ES2,ES3,ES4,ES5,METRICBEAT elasticComponent
+    class CLB,LLB nginxComponent
+    class ELB haproxyComponent
+    class KIBANA kibanaComponent
+    class SETUP setupComponent
+    class Start,Phase1 phaseComponent
