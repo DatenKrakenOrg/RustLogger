@@ -114,11 +114,13 @@ async fn main() {
 fn process_file(config: &Config) -> Vec<LogEntry> {
     
     // Read CSV using Polars with proper escaping handling
-    let df = CsvReader::from_path(&config.logfile_path)
-        .expect("Failed to open CSV file")
-        .has_header(true)
-        .finish()
-        .expect("Failed to read CSV file");
+    let df = CsvReadOptions::default()
+            .with_has_header(true)
+            .try_into_reader_with_file_path(Some(config.logfile_path.clone().into()))
+            .expect("Failed to open CSV file")
+            .finish()
+            .expect("Failed to read CSV file");
+
     
     // Process all rows into LogEntry structs first
     let mut log_entries = Vec::new();
