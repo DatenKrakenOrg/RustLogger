@@ -1,8 +1,9 @@
-use crate::log_entry::ElasticLogDocument;
+use crate::log_entry::{ElasticLogDocument, LogEntry, ContainerLogEntry};
+use crate::query_structures::{LogQuery, SearchQuery, ContainerLogQuery, ContainerSearchQuery};
 use crate::server_error::ServerError;
 use actix_web::http::StatusCode;
 use elasticsearch::{
-    Elasticsearch, IndexParts,
+    Elasticsearch, IndexParts, SearchParts,
     auth::Credentials,
     http::transport::{SingleNodeConnectionPool, TransportBuilder},
     indices::{IndicesCreateParts, IndicesExistsParts},
@@ -228,4 +229,304 @@ pub fn create_container_log_mapping() -> Value {
             "log_message": { "type": "text", "analyzer": "standard"  },
         }
     })
+}
+
+pub async fn query_container_logs(
+    index_name: &str,
+    client: &Elasticsearch,
+    query: &ContainerLogQuery,
+) -> Result<Vec<ContainerLogEntry>, ServerError> {
+    let mut must_clauses = Vec::new();
+    
+    if let Some(container_name) = &query.container_name {
+        must_clauses.push(json!({
+            "term": { "container_name": container_name }
+        }));
+    }
+    
+    if query.from.is_some() || query.to.is_some() {
+        let mut range_query = json!({ "range": { "timestamp": {} } });
+        if let Some(from) = query.from {
+            range_query["range"]["timestamp"]["gte"] = json!(from.to_rfc3339());
+        }
+        if let Some(to) = query.to {
+            range_query["range"]["timestamp"]["lte"] = json!(to.to_rfc3339());
+        }
+        must_clauses.push(range_query);
+    }
+    
+    let search_body = if must_clauses.is_empty() {
+        json!({
+            "query": { "match_all": {} },
+            "sort": [{ "timestamp": { "order": "desc" } }],
+            "size": query.limit.unwrap_or(100),
+            "from": query.offset.unwrap_or(0)
+        })
+    } else {
+        json!({
+            "query": { "bool": { "must": must_clauses } },
+            "sort": [{ "timestamp": { "order": "desc" } }],
+            "size": query.limit.unwrap_or(100),
+            "from": query.offset.unwrap_or(0)
+        })
+    };
+    
+    let response = client
+        .search(SearchParts::Index(&[index_name]))
+        .body(search_body)
+        .send()
+        .await
+        .map_err(|e| ServerError {
+            code: StatusCode::GATEWAY_TIMEOUT,
+            message: String::from("Search request failed"),
+            additional_information: e.to_string(),
+        })?;
+        
+    let response_body: Value = response
+        .json()
+        .await
+        .map_err(|e| ServerError {
+            code: StatusCode::INTERNAL_SERVER_ERROR,
+            message: String::from("Failed to parse search response"),
+            additional_information: e.to_string(),
+        })?;
+        
+    let hits = response_body["hits"]["hits"]
+        .as_array()
+        .ok_or_else(|| ServerError {
+            code: StatusCode::INTERNAL_SERVER_ERROR,
+            message: String::from("Invalid search response format"),
+            additional_information: String::from("Expected hits array in response"),
+        })?;
+        
+    let mut logs = Vec::new();
+    for hit in hits {
+        if let Some(source) = hit["_source"].as_object() {
+            let log_entry: ContainerLogEntry = serde_json::from_value(json!(source))
+                .map_err(|e| ServerError {
+                    code: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: String::from("Failed to deserialize container log entry"),
+                    additional_information: e.to_string(),
+                })?;
+            logs.push(log_entry);
+        }
+    }
+    
+    Ok(logs)
+}
+
+pub async fn search_container_logs(
+    index_name: &str,
+    client: &Elasticsearch,
+    search: &ContainerSearchQuery,
+) -> Result<Vec<ContainerLogEntry>, ServerError> {
+    let search_body = json!({
+        "query": {
+            "multi_match": {
+                "query": search.query,
+                "fields": ["log_message", "container_name"],
+                "type": "best_fields",
+                "fuzziness": "AUTO"
+            }
+        },
+        "sort": [{ "timestamp": { "order": "desc" } }],
+        "size": search.limit.unwrap_or(100),
+        "from": search.offset.unwrap_or(0)
+    });
+    
+    let response = client
+        .search(SearchParts::Index(&[index_name]))
+        .body(search_body)
+        .send()
+        .await
+        .map_err(|e| ServerError {
+            code: StatusCode::GATEWAY_TIMEOUT,
+            message: String::from("Search request failed"),
+            additional_information: e.to_string(),
+        })?;
+        
+    let response_body: Value = response
+        .json()
+        .await
+        .map_err(|e| ServerError {
+            code: StatusCode::INTERNAL_SERVER_ERROR,
+            message: String::from("Failed to parse search response"),
+            additional_information: e.to_string(),
+        })?;
+        
+    let hits = response_body["hits"]["hits"]
+        .as_array()
+        .ok_or_else(|| ServerError {
+            code: StatusCode::INTERNAL_SERVER_ERROR,
+            message: String::from("Invalid search response format"),
+            additional_information: String::from("Expected hits array in response"),
+        })?;
+        
+    let mut logs = Vec::new();
+    for hit in hits {
+        if let Some(source) = hit["_source"].as_object() {
+            let log_entry: ContainerLogEntry = serde_json::from_value(json!(source))
+                .map_err(|e| ServerError {
+                    code: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: String::from("Failed to deserialize container log entry"),
+                    additional_information: e.to_string(),
+                })?;
+            logs.push(log_entry);
+        }
+    }
+    
+    Ok(logs)
+}
+
+pub async fn query_logs(
+    index_name: &str,
+    client: &Elasticsearch,
+    query: &LogQuery,
+) -> Result<Vec<LogEntry>, ServerError> {
+    let mut must_clauses = Vec::new();
+    
+    if let Some(level) = &query.level {
+        must_clauses.push(json!({
+            "term": { "level": level.to_uppercase() }
+        }));
+    }
+    
+    if let Some(device) = &query.device {
+        must_clauses.push(json!({
+            "term": { "msg.device": device }
+        }));
+    }
+    
+    if query.from.is_some() || query.to.is_some() {
+        let mut range_query = json!({ "range": { "timestamp": {} } });
+        if let Some(from) = query.from {
+            range_query["range"]["timestamp"]["gte"] = json!(from.to_rfc3339());
+        }
+        if let Some(to) = query.to {
+            range_query["range"]["timestamp"]["lte"] = json!(to.to_rfc3339());
+        }
+        must_clauses.push(range_query);
+    }
+    
+    let search_body = if must_clauses.is_empty() {
+        json!({
+            "query": { "match_all": {} },
+            "sort": [{ "timestamp": { "order": "desc" } }],
+            "size": query.limit.unwrap_or(100),
+            "from": query.offset.unwrap_or(0)
+        })
+    } else {
+        json!({
+            "query": { "bool": { "must": must_clauses } },
+            "sort": [{ "timestamp": { "order": "desc" } }],
+            "size": query.limit.unwrap_or(100),
+            "from": query.offset.unwrap_or(0)
+        })
+    };
+    
+    let response = client
+        .search(SearchParts::Index(&[index_name]))
+        .body(search_body)
+        .send()
+        .await
+        .map_err(|e| ServerError {
+            code: StatusCode::GATEWAY_TIMEOUT,
+            message: String::from("Search request failed"),
+            additional_information: e.to_string(),
+        })?;
+        
+    let response_body: Value = response
+        .json()
+        .await
+        .map_err(|e| ServerError {
+            code: StatusCode::INTERNAL_SERVER_ERROR,
+            message: String::from("Failed to parse search response"),
+            additional_information: e.to_string(),
+        })?;
+        
+    let hits = response_body["hits"]["hits"]
+        .as_array()
+        .ok_or_else(|| ServerError {
+            code: StatusCode::INTERNAL_SERVER_ERROR,
+            message: String::from("Invalid search response format"),
+            additional_information: String::from("Expected hits array in response"),
+        })?;
+        
+    let mut logs = Vec::new();
+    for hit in hits {
+        if let Some(source) = hit["_source"].as_object() {
+            let log_entry: LogEntry = serde_json::from_value(json!(source))
+                .map_err(|e| ServerError {
+                    code: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: String::from("Failed to deserialize log entry"),
+                    additional_information: e.to_string(),
+                })?;
+            logs.push(log_entry);
+        }
+    }
+    
+    Ok(logs)
+}
+
+pub async fn search_logs(
+    index_name: &str,
+    client: &Elasticsearch,
+    search: &SearchQuery,
+) -> Result<Vec<LogEntry>, ServerError> {
+    let search_body = json!({
+        "query": {
+            "multi_match": {
+                "query": search.query,
+                "fields": ["msg.msg", "msg.device", "level"],
+                "type": "best_fields",
+                "fuzziness": "AUTO"
+            }
+        },
+        "sort": [{ "timestamp": { "order": "desc" } }],
+        "size": search.limit.unwrap_or(100),
+        "from": search.offset.unwrap_or(0)
+    });
+    
+    let response = client
+        .search(SearchParts::Index(&[index_name]))
+        .body(search_body)
+        .send()
+        .await
+        .map_err(|e| ServerError {
+            code: StatusCode::GATEWAY_TIMEOUT,
+            message: String::from("Search request failed"),
+            additional_information: e.to_string(),
+        })?;
+        
+    let response_body: Value = response
+        .json()
+        .await
+        .map_err(|e| ServerError {
+            code: StatusCode::INTERNAL_SERVER_ERROR,
+            message: String::from("Failed to parse search response"),
+            additional_information: e.to_string(),
+        })?;
+        
+    let hits = response_body["hits"]["hits"]
+        .as_array()
+        .ok_or_else(|| ServerError {
+            code: StatusCode::INTERNAL_SERVER_ERROR,
+            message: String::from("Invalid search response format"),
+            additional_information: String::from("Expected hits array in response"),
+        })?;
+        
+    let mut logs = Vec::new();
+    for hit in hits {
+        if let Some(source) = hit["_source"].as_object() {
+            let log_entry: LogEntry = serde_json::from_value(json!(source))
+                .map_err(|e| ServerError {
+                    code: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: String::from("Failed to deserialize log entry"),
+                    additional_information: e.to_string(),
+                })?;
+            logs.push(log_entry);
+        }
+    }
+    
+    Ok(logs)
 }
