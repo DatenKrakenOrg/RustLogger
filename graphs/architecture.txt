@@ -1,0 +1,45 @@
+graph TB
+    %% External components
+    EXT[SysLog Log Driver] --> CLB[Container Log Load Balancer]
+
+    %% Load Balancers
+    CLB --> CLC1[Container Log Collector]
+
+    %% Log Forwarding API
+    CLC1 --> LLB[Log Forwarding LB]
+
+    LLB --> LFA1[Log Forwarding API]
+
+    %% Elasticsearch Cluster
+    LFA1 --> ELB[Elastic Load Balancer]
+
+    ELB --> ES1[Elasticsearch Cluster]
+
+    %% Log Generation & Sending
+    LGEN[Log Generator] --> LOGS[Shared Logs Volume]
+    LOGS --> LSEND[Log Sender]
+    LSEND --> LLB
+
+    %% TUI Client
+    TUI[Log TUI] <--> LLB
+
+    %% Monitoring
+    METRICBEAT[Metricbeat] --> ELB
+
+    %% Kibana
+    KIBANA[Kibana] <--> ELB
+
+    %% Data Flow Annotations
+    classDef rustComponent fill:#CE422B,stroke:#000,stroke-width:2px,color:#fff
+    classDef elasticComponent fill:#005571,stroke:#000,stroke-width:2px,color:#fff
+    classDef nginxComponent fill:#009639,stroke:#000,stroke-width:2px,color:#fff
+    classDef haproxyComponent fill:#106DA9,stroke:#000,stroke-width:2px,color:#fff
+    classDef kibanaComponent fill:#F04E98,stroke:#000,stroke-width:2px,color:#fff
+    classDef volumeComponent fill:#FFA500,stroke:#000,stroke-width:2px,color:#fff
+
+    class CLC1,CLC2,CLC3,LFA1,LFA2,LFA3,LGEN,LSEND,TUI rustComponent
+    class ES1,ES2,ES3,ES4,ES5,SETUP,METRICBEAT elasticComponent
+    class CLB,LLB nginxComponent
+    class ELB haproxyComponent
+    class KIBANA kibanaComponent
+    class LOGS volumeComponent

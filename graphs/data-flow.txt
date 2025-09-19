@@ -1,0 +1,54 @@
+flowchart TD
+    %% Log Generation
+    LG[Log Generator]
+    CSV[CSV Log Files]
+
+    %% Log Sending
+    LS[Log Sender]
+
+    %% Container Logs
+    CONT[Container Logs]
+    CLC[Container Log Collector]
+
+    %% API Layer
+    API[Log Forwarding Api]
+
+    %% Storage
+    ES[Elasticsearch Cluster]
+
+    %% User Interface
+    TUI[Log Tui]
+
+    %% External Systems
+    EXT[Kibana]
+
+    %% Data Flow
+    LG -->|generates| CSV
+    CSV -->|reads| LS
+    LS -->|POST /send_log| API
+
+    CONT -->|syslog UDP| CLC
+    CLC -->|POST /send_container_log| API
+
+    API -->|indexes| ES
+
+    TUI -->|GET /logs| API
+    TUI -->|GET /container-logs| API
+    TUI -->|GET /logs/search| API
+
+    EXT -->|queries| ES
+
+    %% Internal API operations
+    API -->|queries| ES
+
+    %% Color scheme based on technology
+    classDef rustComponent fill:#CE422B,stroke:#000,stroke-width:2px,color:#fff
+    classDef elasticComponent fill:#005571,stroke:#000,stroke-width:2px,color:#fff
+    classDef kibanaComponent fill:#F04E98,stroke:#000,stroke-width:2px,color:#fff
+    classDef volumeComponent fill:#FFA500,stroke:#000,stroke-width:2px,color:#fff
+
+    class LG,LS,CLC,API,TUI rustComponent
+    class ES elasticComponent
+    class EXT kibanaComponent
+    class CSV volumeComponent
+    class CONT volumeComponent
