@@ -26,46 +26,6 @@ export LOG_API_URL=http://localhost:8080
 # Run the TUI
 cargo run
 ```
-
-### Keyboard Shortcuts
-
-#### Normal Mode
-- `↑/↓`: Navigate up/down through logs
-- `w/s`: Page up/down through logs
-- `Enter`: View log details
-- `/`: Enter search mode
-- `f`: Cycle through sort fields (timestamp → level → device → temperature → humidity)
-- `o`: Toggle sort order (ascending ↔ descending)
-- `S`: Enter custom sort mode (advanced sorting)
-- `l`: Set log limit (number of logs to fetch)
-- `r`: Manually refresh logs
-- `a`: Toggle auto-refresh on/off
-- `c`: Clear current search
-- `q`: Quit application
-
-#### Search Mode
-- Type your search query
-- `Enter`: Execute search
-- `Esc`: Cancel and return to normal mode
-
-#### Sort Mode (Advanced)
-- Type sort commands like:
-  - `timestamp asc` - Sort by timestamp ascending
-  - `level desc` - Sort by log level descending  
-  - `device` - Sort by device name (descending by default)
-  - `temperature` - Sort by temperature
-  - `humidity` - Sort by humidity
-- `Enter`: Apply custom sort
-- `Esc`: Cancel and return to normal mode
-
-#### Limit Mode
-- Enter a number to set how many logs to fetch (e.g., `500`, `1000`)
-- `Enter`: Apply new limit and refresh
-- `Esc`: Cancel and return to normal mode
-
-#### Details Mode
-- `Enter` or `Esc`: Close details and return to normal mode
-
 ## API Requirements
 
 The TUI expects the log-forwarding API to be running and accessible. The API should provide:
