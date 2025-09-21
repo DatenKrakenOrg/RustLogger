@@ -57,16 +57,27 @@ partition "Phase 2: Elasticsearch Infrastructure" #LIGHTYELLOW {
   end fork
  :Elastic Load Balancer<color:HAPROXYTAG>;
 }
-
-partition "Phase 3: API Services" #LIGHTCORAL {
-    :Log Forwarding Api 1<color:RUSTTAG>;
 fork
-  :Log Forwarding Api 2<color:RUSTTAG>;
+    partition "Phase 3: API Services" #LIGHTCORAL {
+        :Log Forwarding Api 1<color:RUSTTAG>;
+    fork
+      :Log Forwarding Api 2<color:RUSTTAG>;
+    fork again
+      :Log Forwarding Api 3<color:RUSTTAG>;
+    end fork
+      :log-forwarding-lb<color:NGINXTAG>;
+    }
 fork again
-  :Log Forwarding Api 3<color:RUSTTAG>;
+    partition "Phase 3 Elastic Stack Components" #LIGHTGREEN {
+    fork
+        :Kibana <color:RUSTTAG>;
+    fork again
+        :Metricbeat <color:RUSTTAG>;
+    end fork
+        }
+    stop
 end fork
-  :log-forwarding-lb<color:NGINXTAG>;
-}
+    
 
 end fork
 
