@@ -130,7 +130,28 @@ pub async fn create_logs_index(
     Ok(format!("Index '{}' created successfully", index_name))
 }
 
-/// Persists a document in elasticsearch based on a client and a index
+/// Persists a document in Elasticsearch for any log type that implements the required traits.
+///
+/// This function is generic over log types and handles the serialization and indexing
+/// process. It converts the log entry to a JSON document and sends it to the specified
+/// Elasticsearch index.
+///
+/// # Parameters
+/// * `index_name` - The name of the Elasticsearch index to store the document in
+/// * `client` - Reference to the configured Elasticsearch client
+/// * `log_entry` - The log entry to persist
+///
+/// # Returns
+/// * `Ok(String)` - Success message with the inserted log entry in JSON format
+/// * `Err(ServerError)` - Error if serialization, network communication, or indexing fails
+///
+/// # Examples
+/// ```rust
+/// let client = create_client()?;
+/// let log = LogEntry::new(/* ... */);
+/// let result = send_document("sensor_logs", &client, &log).await?;
+/// println!("{}", result); // "Log entry inserted: {...}"
+/// ```
 pub async fn send_document<T>(
     index_name: &str,
     client: &Elasticsearch,
@@ -172,6 +193,25 @@ where
     ))
 }
 
+/// Retrieves information about all nodes in the Elasticsearch cluster.
+///
+/// This function queries the Elasticsearch cluster for detailed information about
+/// all active nodes, including their roles, versions, and operational status.
+/// The response contains comprehensive cluster topology information.
+///
+/// # Parameters
+/// * `client` - Reference to the configured Elasticsearch client
+///
+/// # Returns
+/// * `Ok(String)` - JSON string containing detailed node information for all cluster nodes
+/// * `Err(ServerError)` - Error if the request fails or response parsing fails
+///
+/// # Examples
+/// ```rust
+/// let client = create_client()?;
+/// let nodes_info = get_nodes(&client).await?;
+/// // Returns detailed JSON with node IDs, names, roles, versions, etc.
+/// ```
 pub async fn get_nodes(client: &Elasticsearch) -> Result<String, ServerError> {
     let result = client
         .nodes()
@@ -194,7 +234,27 @@ pub async fn get_nodes(client: &Elasticsearch) -> Result<String, ServerError> {
     Ok(result)
 }
 
-/// Creates a log mapping. This is needed in order to create a index in elastic search. It's format matches the logs.
+/// Creates the Elasticsearch mapping schema for sensor log entries.
+///
+/// This function defines the field mappings and data types for sensor logs in Elasticsearch.
+///
+/// # Mapping Structure
+/// * `timestamp` - Date field with RFC3339/ISO-8601 format support
+/// * `level` - Keyword field for log levels (INFO, ERROR, WARN, etc.)
+/// * `temperature` - Float field for temperature sensor readings
+/// * `humidity` - Float field for humidity sensor readings  
+/// * `msg.device` - Keyword field for device identification
+/// * `msg.msg` - Text field with standard analyzer for message content
+/// * `msg.exceeded_values` - Boolean field indicating threshold violations
+///
+/// # Returns
+/// * `Value` - JSON object containing the complete mapping definition
+///
+/// # Examples
+/// ```rust
+/// let mapping = create_log_mapping();
+/// create_logs_index("sensor_logs", &client, mapping).await?;
+/// ```
 pub fn create_log_mapping() -> Value {
     json!({
         "properties": {
@@ -217,6 +277,23 @@ pub fn create_log_mapping() -> Value {
     })
 }
 
+/// Creates the Elasticsearch mapping schema for container log entries.
+///
+/// This function defines the field mappings and data types for container logs in Elasticsearch.
+///
+/// # Mapping Structure
+/// * `timestamp` - Date field with RFC3339/ISO-8601 format support for temporal queries
+/// * `container_name` - Keyword field for exact container name matching and filtering
+/// * `log_message` - Text field with standard analyzer for full-text search capabilities
+///
+/// # Returns
+/// * `Value` - JSON object containing the complete mapping definition for container logs
+///
+/// # Examples
+/// ```rust
+/// let mapping = create_container_log_mapping();
+/// create_logs_index("container_logs", &client, mapping).await?;
+/// ```
 pub fn create_container_log_mapping() -> Value {
     json!({
         "properties" : {
@@ -231,6 +308,38 @@ pub fn create_container_log_mapping() -> Value {
     })
 }
 
+/// Queries container logs from Elasticsearch with filtering capabilities.
+///
+/// This function performs structured queries on container logs with support for filtering
+/// by container name and time range. Results are sorted by timestamp in descending order
+/// (newest first) and support pagination.
+///
+/// # Parameters
+/// * `index_name` - The name of the Elasticsearch index containing container logs
+/// * `client` - Reference to the configured Elasticsearch client
+/// * `query` - Container log query parameters including filters and pagination
+///
+/// # Query Filters
+/// * `container_name` - Filter logs by specific container name (exact match)
+/// * `from`/`to` - Time range filter using DateTime<Utc> boundaries
+/// * `limit` - Maximum number of results to return (default: 100)
+/// * `offset` - Number of results to skip for pagination (default: 0)
+///
+/// # Returns
+/// * `Ok(Vec<ContainerLogEntry>)` - List of matching container log entries
+/// * `Err(ServerError)` - Error if query execution or response parsing fails
+///
+/// # Examples
+/// ```rust
+/// let query = ContainerLogQuery {
+///     container_name: Some("web-server".to_string()),
+///     from: Some(yesterday),
+///     to: Some(now),
+///     limit: Some(50),
+///     offset: Some(0),
+/// };
+/// let logs = query_container_logs("container_logs", &client, &query).await?;
+/// ```
 pub async fn query_container_logs(
     index_name: &str,
     client: &Elasticsearch,
@@ -315,6 +424,30 @@ pub async fn query_container_logs(
     Ok(logs)
 }
 
+/// Performs full-text search on container logs using multi-field matching.
+///
+/// This function executes fuzzy full-text search across container log fields with
+/// automatic relevance scoring. It searches both log message content and container
+/// names, providing flexible search capabilities with automatic typo tolerance.
+///
+/// # Parameters
+/// * `index_name` - The name of the Elasticsearch index containing container logs
+/// * `client` - Reference to the configured Elasticsearch client  
+/// * `search` - Container search query parameters including search terms and pagination
+///
+/// # Returns
+/// * `Ok(Vec<ContainerLogEntry>)` - List of matching container log entries ordered by relevance and timestamp
+/// * `Err(ServerError)` - Error if search execution or response parsing fails
+///
+/// # Examples
+/// ```rust
+/// let search = ContainerSearchQuery {
+///     query: "error database connection".to_string(),
+///     limit: Some(25),
+///     offset: Some(0),
+/// };
+/// let logs = search_container_logs("container_logs", &client, &search).await?;
+/// ```
 pub async fn search_container_logs(
     index_name: &str,
     client: &Elasticsearch,
@@ -378,6 +511,40 @@ pub async fn search_container_logs(
     Ok(logs)
 }
 
+/// Queries sensor logs from Elasticsearch with comprehensive filtering capabilities.
+///
+/// This function performs structured queries on sensor logs with support for filtering
+/// by log level, device name, and time range. It's designed for querying structured
+/// sensor data with temperature and humidity readings.
+///
+/// # Parameters
+/// * `index_name` - The name of the Elasticsearch index containing sensor logs
+/// * `client` - Reference to the configured Elasticsearch client
+/// * `query` - Sensor log query parameters including filters and pagination
+///
+/// # Query Filters
+/// * `level` - Filter by log level (INFO, ERROR, WARN, etc.) - case insensitive, stored as uppercase
+/// * `device` - Filter logs by specific device identifier (exact match)
+/// * `from`/`to` - Time range filter using DateTime<Utc> boundaries
+/// * `limit` - Maximum number of results to return (default: 100)
+/// * `offset` - Number of results to skip for pagination (default: 0)
+///
+/// # Returns
+/// * `Ok(Vec<LogEntry>)` - List of matching sensor log entries sorted by timestamp (newest first)
+/// * `Err(ServerError)` - Error if query execution or response parsing fails
+///
+/// # Examples
+/// ```rust
+/// let query = LogQuery {
+///     level: Some("error".to_string()),
+///     device: Some("sensor-01".to_string()),
+///     from: Some(yesterday),
+///     to: Some(now),
+///     limit: Some(100),
+///     offset: Some(0),
+/// };
+/// let logs = query_logs("sensor_logs", &client, &query).await?;
+/// ```
 pub async fn query_logs(
     index_name: &str,
     client: &Elasticsearch,
@@ -468,6 +635,37 @@ pub async fn query_logs(
     Ok(logs)
 }
 
+/// Performs full-text search on sensor logs using multi-field matching with fuzzy capabilities.
+///
+/// This function executes fuzzy full-text search across sensor log fields including
+/// message content, device names, and log levels. It provides comprehensive search
+/// capabilities for sensor data with automatic typo tolerance and relevance scoring.
+///
+/// # Parameters
+/// * `index_name` - The name of the Elasticsearch index containing sensor logs
+/// * `client` - Reference to the configured Elasticsearch client
+/// * `search` - Sensor search query parameters including search terms and pagination
+///
+/// # Search Features
+/// * Multi-field search across `msg.msg`, `msg.device`, and `level` fields
+/// * Fuzzy matching with automatic fuzziness adjustment for typo tolerance
+/// * Best fields matching strategy for optimal relevance scoring
+/// * Results sorted by timestamp in descending order (newest first)
+/// * Pagination support with configurable limit and offset
+///
+/// # Returns
+/// * `Ok(Vec<LogEntry>)` - List of matching sensor log entries ordered by relevance and timestamp
+/// * `Err(ServerError)` - Error if search execution or response parsing fails
+///
+/// # Examples
+/// ```rust
+/// let search = SearchQuery {
+///     query: "temperature exceeded threshold".to_string(),
+///     limit: Some(50),
+///     offset: Some(0),
+/// };
+/// let logs = search_logs("sensor_logs", &client, &search).await?;
+/// ```
 pub async fn search_logs(
     index_name: &str,
     client: &Elasticsearch,
