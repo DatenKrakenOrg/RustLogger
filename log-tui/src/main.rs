@@ -49,6 +49,60 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Runs the main application event loop for the terminal UI.
+///
+/// This function handles the core TUI lifecycle including:
+/// - Rendering the terminal interface at regular intervals (250ms tick rate)
+/// - Processing user input events (keyboard)
+/// - Managing auto-refresh functionality for log data
+/// - Coordinating between different application modes (Auth, Normal, Search, Details, Limit)
+///
+/// # Arguments
+///
+/// * `terminal` - Mutable reference to the terminal backend for rendering
+/// * `app` - Mutable reference to the application state
+///
+/// # Returns
+///
+/// Returns `Ok(())` on successful exit, or an `io::Error` if terminal operations fail
+///
+/// # Event Loop
+///
+/// The loop runs at 250ms intervals and handles:
+/// - Terminal drawing via `ui::draw`
+/// - Input polling with timeout
+/// - Auto-refresh when enabled and not in Auth mode
+/// - Mode-specific keyboard shortcuts and navigation
+///
+/// # Keyboard Controls
+///
+/// **Auth Mode:**
+/// - `q` - Quit application
+/// - `Enter` - Submit API key
+/// - `Backspace` - Delete character
+/// - Characters - Input API key
+///
+/// **Normal Mode:**
+/// - `q` - Quit application
+/// - `Up/Down` - Navigate log entries
+/// - `r` - Manual refresh
+/// - `/` - Enter search mode
+/// - `f` - Cycle sort field
+/// - `o` - Toggle sort direction
+/// - `l` - Enter limit mode
+/// - `a` - Toggle auto-refresh
+/// - `c` - Clear search
+/// - `i` - Switch between sensor/container logs
+/// - `Enter` - View log details
+///
+/// **Details Mode:**
+/// - `Esc/Enter` - Exit details view
+///
+/// **Search/Limit Mode:**
+/// - `Enter` - Execute search/limit
+/// - `Esc` - Cancel input
+/// - `Backspace` - Delete character
+/// - Characters - Input text/numbers
 async fn run_app<B: Backend>(
     terminal: &mut Terminal<B>,
     app: &mut App,

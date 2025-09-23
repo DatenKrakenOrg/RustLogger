@@ -9,6 +9,28 @@ use ratatui::{
     Frame,
 };
 
+/// Main UI rendering function that orchestrates drawing all TUI components.
+///
+/// This function handles the overall layout and determines which UI components
+/// to render based on the current application mode. It creates a three-section
+/// vertical layout (header, content, footer) for normal modes and switches to
+/// a full-screen authentication interface when in Auth mode.
+///
+/// # Layout Structure
+///
+/// **Normal Modes:**
+/// - Header (3 lines): Title, status, sort info, refresh indicators
+/// - Content (flexible): Log list with syntax highlighting and selection
+/// - Footer (3 lines): Context-sensitive help text
+/// - Overlays: Input popups for search/limit, detail view for selected logs
+///
+/// **Auth Mode:**
+/// - Full-screen authentication interface with centered input form
+///
+/// # Arguments
+///
+/// * `f` - Mutable reference to the terminal frame for rendering
+/// * `app` - Mutable reference to the application state
 pub fn draw(f: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -34,6 +56,34 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
 }
 
+/// Renders the header section with title, status, sort info, and refresh indicators.
+///
+/// The header displays context-sensitive information that varies by application mode
+/// and current state. It includes loading indicators, error messages, auto-refresh
+/// status, and sorting configuration.
+///
+/// # Header Elements
+///
+/// - **Title**: Current mode or index type name
+/// - **Log count**: Current/limit display (e.g., "50/100 logs")
+/// - **Sort info**: Active sort field and direction with arrows
+/// - **Status**: Loading, error, or auto-refresh state
+/// - **Last refresh**: Time elapsed since last data fetch
+///
+/// # Color Coding
+///
+/// - Title: Cyan with bold styling
+/// - Log count: Green
+/// - Sort info: Magenta
+/// - Status: Yellow
+/// - Last refresh: Light blue
+/// - Errors: Displayed in status with error message
+///
+/// # Arguments
+///
+/// * `f` - Mutable reference to the terminal frame
+/// * `area` - The rectangular area to render the header in
+/// * `app` - Reference to the application state
 fn draw_header(f: &mut Frame, area: Rect, app: &App) {
     let title = match app.mode {
         Mode::Auth => "Authentication",
@@ -113,6 +163,40 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(header, area);
 }
 
+/// Renders the main log list view with syntax highlighting and selection.
+///
+/// This function displays the log entries in a scrollable list format with
+/// different layouts for sensor logs vs container logs. It handles empty states,
+/// selection highlighting, and search query display.
+///
+/// # Log Entry Formats
+///
+/// **Sensor Logs:**
+/// `YYYY-MM-DD HH:MM:SS LEVEL    DEVICE          T:XX.X°C H:XX.X% Message`
+///
+/// **Container Logs:**
+/// `YYYY-MM-DD HH:MM:SS CONTAINER_NAME       Log message`
+///
+/// # Visual Features
+///
+/// - **Timestamps**: Gray color for consistent visual hierarchy
+/// - **Log levels**: Color-coded (Critical=Red, Warn=Yellow, Info=Blue)
+/// - **Device/Container names**: Magenta for easy identification
+/// - **Temperature/Humidity**: Blue for sensor data
+/// - **Selection**: Dark gray background highlight
+/// - **Search context**: Title shows active search query
+///
+/// # Empty States
+///
+/// - Loading: "Loading logs..."
+/// - Error: "Failed to load logs. Press 'r' to retry."
+/// - No data: "No logs found. Press 'r' to refresh."
+///
+/// # Arguments
+///
+/// * `f` - Mutable reference to the terminal frame
+/// * `area` - The rectangular area to render the log list in
+/// * `app` - Mutable reference to the application state
 fn draw_logs(f: &mut Frame, area: Rect, app: &mut App) {
     if app.logs.is_empty() {
         let empty_msg = if app.loading {
@@ -214,6 +298,31 @@ fn draw_logs(f: &mut Frame, area: Rect, app: &mut App) {
     f.render_stateful_widget(logs_list, area, &mut list_state);
 }
 
+/// Renders the footer with context-sensitive help text based on current mode.
+///
+/// The footer displays keyboard shortcuts and instructions that change
+/// dynamically based on the current application mode, providing users
+/// with relevant guidance for available actions.
+///
+/// # Mode-specific Help Text
+///
+/// - **Auth**: API key entry and authentication instructions
+/// - **Normal**: Full navigation, sorting, and action shortcuts
+/// - **Search**: Search query input and execution instructions
+/// - **Limit**: Log limit setting instructions with current value
+/// - **Details**: Detail view navigation instructions
+///
+/// # Styling
+///
+/// - Gray text for unobtrusive help information
+/// - Centered alignment for balanced layout
+/// - Text wrapping for responsive display
+///
+/// # Arguments
+///
+/// * `f` - Mutable reference to the terminal frame
+/// * `area` - The rectangular area to render the footer in
+/// * `app` - Reference to the application state
 fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
     let help_text = match app.mode {
         Mode::Auth => {
@@ -248,6 +357,29 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(footer, area);
 }
 
+/// Renders a modal input dialog for search and limit entry.
+///
+/// This function creates a centered popup overlay for user input in Search
+/// and Limit modes. The popup includes a text input field with cursor
+/// positioning and appropriate titles based on the mode.
+///
+/// # Input Modes
+///
+/// - **Search Mode**: "Search Logs" - for entering search queries
+/// - **Limit Mode**: "Set Log Limit" - for entering log count limits
+///
+/// # Visual Features
+///
+/// - Centered overlay (60% width, 20% height)
+/// - Yellow text for input visibility
+/// - Bordered container with mode-specific title
+/// - Live cursor positioning at input end
+/// - Clears background content behind popup
+///
+/// # Arguments
+///
+/// * `f` - Mutable reference to the terminal frame
+/// * `app` - Reference to the application state
 fn draw_input_popup(f: &mut Frame, app: &App) {
     let area = centered_rect(60, 20, f.size());
     f.render_widget(Clear, area);
@@ -270,6 +402,41 @@ fn draw_input_popup(f: &mut Frame, app: &App) {
     );
 }
 
+/// Renders a detailed view popup for the selected log entry.
+///
+/// This function displays a comprehensive view of the currently selected log
+/// entry in a large modal popup. The content and format vary between sensor
+/// logs and container logs to show all relevant information.
+///
+/// # Sensor Log Details
+///
+/// - **Timestamp**: Full date/time with UTC designation
+/// - **Level**: Color-coded log level (Critical/Warn/Info)
+/// - **Device**: Source device name in magenta
+/// - **Temperature**: Precise temperature reading in °C
+/// - **Humidity**: Precise humidity percentage
+/// - **Message**: Full log message content
+/// - **Exceeded Values**: Boolean flag for threshold violations
+///
+/// # Container Log Details
+///
+/// - **Timestamp**: Full date/time with UTC designation
+/// - **Container**: Container name in magenta
+/// - **Message**: Full log message content
+///
+/// # Visual Features
+///
+/// - Large centered overlay (80% width, 50% height)
+/// - Bordered container with "Log Details" title
+/// - Bold field labels for easy scanning
+/// - Color-coded values matching main list view
+/// - Text wrapping for long content
+/// - Clears background content behind popup
+///
+/// # Arguments
+///
+/// * `f` - Mutable reference to the terminal frame
+/// * `app` - Reference to the application state
 fn draw_detail_popup(f: &mut Frame, app: &App) {
     if let Some(log) = app.get_selected_log() {
         let area = centered_rect(80, 50, f.size());
@@ -340,6 +507,44 @@ fn draw_detail_popup(f: &mut Frame, app: &App) {
     }
 }
 
+/// Renders the full-screen authentication interface for API key entry.
+///
+/// This function creates a centered authentication form that takes over the
+/// entire screen when the application is in Auth mode. It provides a secure
+/// interface for entering API keys with visual feedback for different states.
+///
+/// # Layout Structure
+///
+/// The interface uses a centered layout with:
+/// - **Title section**: "Log Viewer Authentication" with cyan styling
+/// - **Input section**: Masked API key input field
+/// - **Status section**: Error messages, loading indicators, or instructions
+/// - **Footer**: Keyboard shortcuts for authentication actions
+///
+/// # Security Features
+///
+/// - **Input masking**: API key characters are hidden with asterisks
+/// - **Visual states**: Different colors for normal, loading, and error states
+/// - **Loading feedback**: "Authenticating..." message during API validation
+///
+/// # Visual States
+///
+/// - **Normal**: Green input field with gray instructions
+/// - **Loading**: Yellow text with "Authenticating..." message
+/// - **Error**: Red error message display
+/// - **Success**: Transitions to normal mode automatically
+///
+/// # Responsive Design
+///
+/// - Centered horizontally and vertically
+/// - 60% width for comfortable input area
+/// - Flexible height based on content
+/// - Cursor positioning for active input
+///
+/// # Arguments
+///
+/// * `f` - Mutable reference to the terminal frame
+/// * `app` - Reference to the application state
 fn draw_auth_window(f: &mut Frame, app: &App) {
     let area = f.size();
     
@@ -440,6 +645,35 @@ fn draw_auth_window(f: &mut Frame, app: &App) {
     f.render_widget(footer, footer_area);
 }
 
+/// Helper function to calculate centered rectangular areas for popups and modals.
+///
+/// This utility function creates a centered rectangle within a given area based
+/// on percentage dimensions. It's commonly used for positioning modal dialogs,
+/// popups, and other overlay components in the center of the screen.
+///
+/// # Calculation Method
+///
+/// The function uses a three-section layout in both directions:
+/// - **Margins**: `(100 - percent) / 2` for top/bottom and left/right
+/// - **Content**: `percent` for the actual popup area
+/// - **Margins**: `(100 - percent) / 2` for remaining space
+///
+/// # Arguments
+///
+/// * `percent_x` - Width percentage of the parent area (0-100)
+/// * `percent_y` - Height percentage of the parent area (0-100)
+/// * `r` - The parent rectangular area to center within
+///
+/// # Returns
+///
+/// A `Rect` representing the centered area with the specified dimensions
+///
+/// # Example
+///
+/// ```rust
+/// // Create a popup that's 60% width and 40% height, centered on screen
+/// let popup_area = centered_rect(60, 40, terminal_size);
+/// ```
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
