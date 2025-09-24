@@ -18,6 +18,12 @@ pub enum IndexType {
 }
 
 impl IndexType {
+    /// Returns a human-readable display name for the index type.
+    ///
+    /// # Returns
+    ///
+    /// * `"Sensor Logs"` for `IndexType::Logs`
+    /// * `"Container Logs"` for `IndexType::ContainerLogs`
     pub fn display_name(&self) -> &str {
         match self {
             IndexType::Logs => "Sensor Logs",
@@ -83,6 +89,24 @@ pub struct App {
 }
 
 impl App {
+    /// Creates a new application instance with default configuration.
+    ///
+    /// Initializes the app in Auth mode, requiring user to provide an API key
+    /// before accessing log data. Sets up default values for sorting, refresh
+    /// intervals, and UI state.
+    ///
+    /// # Arguments
+    ///
+    /// * `api_base_url` - Base URL for the log forwarding API
+    ///
+    /// # Returns
+    ///
+    /// A new `App` instance with:
+    /// - Auth mode enabled
+    /// - Auto-refresh enabled (5-second interval)
+    /// - Default limit of 100 logs
+    /// - Timestamp sorting in descending order
+    /// - Sensor logs index selected
     pub fn new(api_base_url: String) -> Self {
         Self {
             logs: Vec::new(),
@@ -105,10 +129,37 @@ impl App {
         }
     }
 
+    /// Determines if the application should automatically refresh log data.
+    ///
+    /// Checks if auto-refresh is enabled and if enough time has elapsed since
+    /// the last refresh based on the configured refresh interval.
+    ///
+    /// # Returns
+    ///
+    /// `true` if auto-refresh should occur, `false` otherwise
     pub fn should_refresh(&self) -> bool {
         self.auto_refresh && self.last_refresh.elapsed() >= self.refresh_interval
     }
 
+    /// Fetches fresh log data from the API based on current search and filter criteria.
+    ///
+    /// This method handles both sensor logs and container logs based on the current
+    /// index type. It supports both filtered queries and full-text search depending
+    /// on whether a search query is active.
+    ///
+    /// # Behavior
+    ///
+    /// - Sets loading state and clears previous errors
+    /// - For sensor logs: uses `fetch_logs` or `search_logs` API endpoints
+    /// - For container logs: uses `fetch_container_logs` or `search_container_logs` endpoints
+    /// - Applies current sort settings to retrieved data
+    /// - Updates last refresh timestamp
+    /// - Adjusts selection if current index is out of bounds
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, or an error if the API request fails.
+    /// API errors are stored in `error_message` for display to the user.
     pub async fn refresh_logs(&mut self) -> Result<()> {
         self.loading = true;
         self.error_message = None;
@@ -160,6 +211,16 @@ impl App {
         Ok(())
     }
 
+    /// Moves the log selection cursor up by one position.
+    ///
+    /// Handles scroll offset adjustment to ensure the selected item
+    /// remains visible when navigating near the top of the list.
+    ///
+    /// # Behavior
+    ///
+    /// - Decrements `selected_index` if not already at the top
+    /// - Adjusts `scroll_offset` if selection moves above visible area
+    /// - No-op if already at the first log entry
     pub fn move_selection_up(&mut self) {
         if self.selected_index > 0 {
             self.selected_index -= 1;
@@ -169,35 +230,80 @@ impl App {
         }
     }
 
+    /// Moves the log selection cursor down by one position.
+    ///
+    /// # Behavior
+    ///
+    /// - Increments `selected_index` if not already at the last log entry
+    /// - No-op if already at the bottom of the log list
+    /// - Does not handle scroll offset (handled by UI rendering)
     pub fn move_selection_down(&mut self) {
         if self.selected_index + 1 < self.logs.len() {
             self.selected_index += 1;
         }
     }
 
+    /// Enters search mode and prepares for user input.
+    ///
+    /// Switches the application to Search mode and clears the input buffer
+    /// to prepare for new search query input from the user.
     pub fn enter_search_mode(&mut self) {
         self.mode = Mode::Search;
         self.input_buffer.clear();
     }
 
+    /// Enters limit mode and prepares for user input.
+    ///
+    /// Switches the application to Limit mode and pre-fills the input buffer
+    /// with the current log limit value for editing.
     pub fn enter_limit_mode(&mut self) {
         self.mode = Mode::Limit;
         self.input_buffer = self.log_limit.to_string();
     }
 
+    /// Exits the current input mode and returns to Normal mode.
+    ///
+    /// Clears the input buffer and switches back to Normal mode,
+    /// canceling any pending input operation.
     pub fn exit_mode(&mut self) {
         self.mode = Mode::Normal;
         self.input_buffer.clear();
     }
 
+    /// Handles character input in input modes.
+    ///
+    /// Appends the given character to the input buffer when in
+    /// Search, Limit, or Auth modes.
+    ///
+    /// # Arguments
+    ///
+    /// * `c` - The character to add to the input buffer
     pub fn handle_input_char(&mut self, c: char) {
         self.input_buffer.push(c);
     }
 
+    /// Handles backspace input in input modes.
+    ///
+    /// Removes the last character from the input buffer when in
+    /// Search, Limit, or Auth modes.
     pub fn handle_backspace(&mut self) {
         self.input_buffer.pop();
     }
 
+    /// Executes the pending input based on the current mode.
+    ///
+    /// Processes user input differently depending on the active mode:
+    ///
+    /// # Mode-specific behavior
+    ///
+    /// - **Search**: Sets search query and refreshes logs with search results
+    /// - **Limit**: Parses and sets log limit (minimum 1), then refreshes logs
+    /// - **Auth**: Attempts to authenticate with the provided API key
+    /// - **Other modes**: No-op
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, or an error if log refresh or authentication fails
     pub async fn execute_input(&mut self) -> Result<()> {
         match self.mode {
             Mode::Search => {
@@ -221,6 +327,24 @@ impl App {
         }
     }
     
+    /// Sorts a collection of log entries based on current sort settings.
+    ///
+    /// Applies sorting logic that varies by index type:
+    ///
+    /// # Sensor Logs (IndexType::Logs)
+    /// - **Timestamp**: Chronological ordering
+    /// - **Level**: Priority-based (Critical > Warn > Info)
+    /// - **Device**: Alphabetical by device name
+    /// - **Temperature/Humidity**: Numerical comparison
+    ///
+    /// # Container Logs (IndexType::ContainerLogs)
+    /// - **Timestamp**: Chronological ordering
+    /// - **Device**: Alphabetical by container name
+    /// - **Other fields**: Falls back to timestamp
+    ///
+    /// # Arguments
+    ///
+    /// * `logs` - Mutable reference to the log collection to sort
     pub fn sort_logs(&self, logs: &mut Vec<LogEntryType>) {
         match self.current_index_type {
             IndexType::Logs => {
@@ -276,6 +400,13 @@ impl App {
         }
     }
     
+    /// Applies current sort settings to the loaded log collection.
+    ///
+    /// Re-sorts the current `logs` vector using the active sort field and direction.
+    /// Also resets the selection to the first item and scroll offset to maintain
+    /// consistent UI state after sorting.
+    ///
+    /// Used when sort settings change to immediately reflect the new ordering.
     pub fn apply_current_sort(&mut self) {
         let sort_field = self.sort_state.field;
         let sort_direction = self.sort_state.direction;
@@ -338,11 +469,26 @@ impl App {
         self.scroll_offset = 0;
     }
 
+    /// Clears the current search query and returns to normal viewing mode.
+    ///
+    /// Resets the search query to empty and switches to Normal mode.
+    /// Call `refresh_logs()` after this to load unfiltered results.
     pub fn clear_search(&mut self) {
         self.search_query.clear();
         self.mode = Mode::Normal;
     }
     
+    /// Cycles through available sort fields for the current index type.
+    ///
+    /// The available fields depend on the current index type:
+    ///
+    /// # Sensor Logs
+    /// Cycles: Timestamp → Level → Device → Temperature → Humidity → Timestamp
+    ///
+    /// # Container Logs  
+    /// Cycles: Timestamp → Device → Timestamp (only these two fields are relevant)
+    ///
+    /// Automatically applies the new sort order to the current log collection.
     pub fn cycle_sort_field(&mut self) {
         self.sort_state.field = match self.current_index_type {
             IndexType::Logs => {
@@ -366,6 +512,12 @@ impl App {
         self.apply_current_sort();
     }
     
+    /// Toggles the sort direction between ascending and descending.
+    ///
+    /// Switches between:
+    /// - `SortDirection::Ascending` ↔ `SortDirection::Descending`
+    ///
+    /// Automatically applies the new sort order to the current log collection.
     pub fn toggle_sort_direction(&mut self) {
         self.sort_state.direction = match self.sort_state.direction {
             SortDirection::Ascending => SortDirection::Descending,
@@ -374,20 +526,45 @@ impl App {
         self.apply_current_sort();
     }
     
+    /// Enters details view mode for the currently selected log entry.
+    ///
+    /// Switches to Details mode if there are logs available to view.
+    /// No-op if the log list is empty.
     pub fn enter_details_mode(&mut self) {
         if !self.logs.is_empty() {
             self.mode = Mode::Details;
         }
     }
 
+    /// Toggles the auto-refresh functionality on/off.
+    ///
+    /// When auto-refresh is enabled, the application will automatically
+    /// fetch fresh log data every 5 seconds when in Normal mode.
     pub fn toggle_auto_refresh(&mut self) {
         self.auto_refresh = !self.auto_refresh;
     }
 
+    /// Returns a reference to the currently selected log entry.
+    ///
+    /// # Returns
+    ///
+    /// `Some(&LogEntryType)` if a log is selected and the list is not empty,
+    /// `None` if no logs are available or selection is out of bounds.
     pub fn get_selected_log(&self) -> Option<&LogEntryType> {
         self.logs.get(self.selected_index)
     }
 
+    /// Returns the appropriate color for displaying a log level in the UI.
+    ///
+    /// # Arguments
+    ///
+    /// * `level` - The log level to get a color for
+    ///
+    /// # Returns
+    ///
+    /// * `Red` for Critical level
+    /// * `Yellow` for Warn level  
+    /// * `Blue` for Info level
     pub fn get_log_level_color(&self, level: &LogLevel) -> ratatui::style::Color {
         match level {
             LogLevel::Critical => ratatui::style::Color::Red,
@@ -396,6 +573,22 @@ impl App {
         }
     }
 
+    /// Authenticates with the API using the provided API key.
+    ///
+    /// Validates the API key by attempting to fetch a single log entry.
+    /// On success, switches to Normal mode and fetches initial log data.
+    /// On failure, remains in Auth mode and displays an error message.
+    ///
+    /// # Validation
+    ///
+    /// - Rejects empty API keys
+    /// - Tests authentication by calling `fetch_logs` with minimal parameters
+    /// - Stores the API key only if authentication succeeds
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` regardless of authentication result. Authentication errors
+    /// are stored in `auth_error` for display to the user.
     pub async fn authenticate(&mut self) -> Result<()> {
         if self.input_buffer.trim().is_empty() {
             self.auth_error = Some("API key cannot be empty".to_string());
@@ -427,6 +620,20 @@ impl App {
         }
     }
 
+    /// Switches between sensor logs and container logs indices.
+    ///
+    /// Toggles between `IndexType::Logs` and `IndexType::ContainerLogs`.
+    /// When switching to container logs, validates and adjusts sort field
+    /// to ensure compatibility (only Timestamp and Device are valid).
+    ///
+    /// # Side effects
+    ///
+    /// - Clears current log collection
+    /// - Resets selection and scroll position
+    /// - Clears search query and error messages
+    /// - Adjusts sort field if switching to container logs
+    ///
+    /// Call `refresh_logs()` after this method to load data for the new index type.
     pub fn switch_index(&mut self) {
         self.current_index_type = match self.current_index_type {
             IndexType::Logs => IndexType::ContainerLogs,
@@ -456,6 +663,14 @@ impl App {
 
 
 
+    /// Returns a masked version of the current input buffer for secure display.
+    ///
+    /// Used in Auth mode to hide the API key while typing by replacing
+    /// each character with an asterisk.
+    ///
+    /// # Returns
+    ///
+    /// A string of asterisks matching the length of the input buffer
     pub fn get_masked_input(&self) -> String {
         "*".repeat(self.input_buffer.len())
     }

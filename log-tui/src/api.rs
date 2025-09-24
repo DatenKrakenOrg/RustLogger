@@ -51,6 +51,25 @@ pub struct ApiClient {
 }
 
 impl ApiClient {
+    /// Creates a new API client with the specified base URL.
+    ///
+    /// Initializes a new HTTP client instance configured to communicate with
+    /// the log forwarding API. The client starts without authentication and
+    /// requires an API key to be set before making requests.
+    ///
+    /// # Arguments
+    ///
+    /// * `base_url` - Base URL of the log forwarding API (e.g., "http://localhost:8080")
+    ///
+    /// # Returns
+    ///
+    /// A new `ApiClient` instance ready for configuration and use
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let client = ApiClient::new("http://localhost:8080".to_string());
+    /// ```
     pub fn new(base_url: String) -> Self {
         Self {
             client: Client::new(),
@@ -59,10 +78,61 @@ impl ApiClient {
         }
     }
 
+    /// Sets or clears the API authentication key.
+    ///
+    /// Configures the API key used for authenticating requests to the log
+    /// forwarding API. The key is sent as an `X-API-Key` header with each request.
+    ///
+    /// # Arguments
+    ///
+    /// * `api_key` - Optional API key string. Pass `None` to clear authentication.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Set an API key
+    /// client.set_api_key(Some("your-api-key".to_string()));
+    /// 
+    /// // Clear the API key
+    /// client.set_api_key(None);
+    /// ```
     pub fn set_api_key(&mut self, api_key: Option<String>) {
         self.api_key = api_key;
     }
 
+    /// Retrieves sensor logs from the API with optional filtering and pagination.
+    ///
+    /// Fetches log entries from the `/logs` endpoint with support for various
+    /// filtering options including log level, device name, date ranges, and
+    /// pagination parameters. All parameters are optional and can be combined.
+    ///
+    /// # Arguments
+    ///
+    /// * `limit` - Maximum number of logs to retrieve (default: server-defined)
+    /// * `offset` - Number of logs to skip for pagination (default: 0)
+    /// * `level` - Filter by log level ("CRITICAL", "WARN", "INFO")
+    /// * `device` - Filter by device name (URL-encoded automatically)
+    /// * `from` - Start of date range filter (RFC3339 format)
+    /// * `to` - End of date range filter (RFC3339 format)
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Vec<LogEntry>)` on success, containing the filtered log entries.
+    /// Returns an error if the request fails or authentication is invalid.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Fetch latest 50 critical logs
+    /// let logs = client.fetch_logs(
+    ///     Some(50),
+    ///     Some(0),
+    ///     Some("CRITICAL"),
+    ///     None,
+    ///     None,
+    ///     None
+    /// ).await?;
+    /// ```
     pub async fn fetch_logs(
         &self,
         limit: Option<usize>,
@@ -110,6 +180,29 @@ impl ApiClient {
     Ok(logs_response.logs)
     }
 
+    /// Performs full-text search on sensor logs.
+    ///
+    /// Searches through sensor log content using the `/logs/search` endpoint.
+    /// The search operates on message content, device names, and log levels
+    /// with fuzzy matching capabilities provided by Elasticsearch.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - Search query string (URL-encoded automatically)
+    /// * `limit` - Maximum number of results to return (default: server-defined)
+    /// * `offset` - Number of results to skip for pagination (default: 0)
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Vec<LogEntry>)` containing matching log entries sorted by relevance.
+    /// Returns an error if the request fails or authentication is invalid.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Search for temperature-related logs
+    /// let logs = client.search_logs("temperature sensor", Some(100), Some(0)).await?;
+    /// ```
     pub async fn search_logs(
         &self,
         query: &str,
@@ -140,6 +233,29 @@ impl ApiClient {
         Ok(logs_response.logs)
     }
 
+    /// Performs full-text search on container logs.
+    ///
+    /// Searches through container log content using the `/container-logs/search` endpoint.
+    /// The search operates on log messages and container names with fuzzy matching
+    /// capabilities provided by Elasticsearch.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - Search query string (URL-encoded automatically)
+    /// * `limit` - Maximum number of results to return (default: server-defined)
+    /// * `offset` - Number of results to skip for pagination (default: 0)
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Vec<ContainerLogEntry>)` containing matching container log entries
+    /// sorted by relevance. Returns an error if the request fails or authentication is invalid.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Search for error logs from web containers
+    /// let logs = client.search_container_logs("error web", Some(50), Some(0)).await?;
+    /// ```
     pub async fn search_container_logs(
         &self,
         query: &str,
@@ -170,6 +286,43 @@ impl ApiClient {
         Ok(logs_response.logs)
     }
 
+    /// Retrieves container logs from the API with optional filtering and pagination.
+    ///
+    /// Fetches container log entries from the `/container-logs` endpoint with support
+    /// for filtering by container name, date ranges, and pagination parameters.
+    /// All parameters are optional and can be combined.
+    ///
+    /// # Arguments
+    ///
+    /// * `limit` - Maximum number of logs to retrieve (default: server-defined)
+    /// * `offset` - Number of logs to skip for pagination (default: 0)
+    /// * `container_name` - Filter by specific container name (URL-encoded automatically)
+    /// * `from` - Start of date range filter (RFC3339 format)
+    /// * `to` - End of date range filter (RFC3339 format)
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Vec<ContainerLogEntry>)` on success, containing the filtered container log entries.
+    /// Returns an error if the request fails or authentication is invalid.
+    ///
+    /// # Filtering Options
+    ///
+    /// - **Container name**: Exact match filtering for specific containers
+    /// - **Date range**: Timestamp-based filtering with RFC3339 dates
+    /// - **Pagination**: Limit and offset for handling large datasets
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Fetch latest 100 logs from "web-server" container
+    /// let logs = client.fetch_container_logs(
+    ///     Some(100),
+    ///     Some(0),
+    ///     Some("web-server"),
+    ///     None,
+    ///     None
+    /// ).await?;
+    /// ```
     pub async fn fetch_container_logs(
         &self,
         limit: Option<usize>,
