@@ -1,0 +1,88 @@
+@startuml
+title Docker Container Startup Sequence
+
+!define RUSTTAG #CE422B
+!define ELASTICTAG #005571
+!define NGINXTAG #009639
+!define HAPROXYTAG #106DA9
+!define KIBANATAG #F04E98
+!define SETUPTAG #FFA500
+
+skinparam activity {
+  BackgroundColor White
+  BorderColor Black
+  FontColor Black
+  FontSize 12
+}
+
+skinparam partition {
+  BackgroundColor #F8F9FA
+  BorderColor #6C757D
+  FontStyle bold
+}
+
+start
+
+fork 
+    :Log Generator<color:RUSTTAG>;
+
+fork again
+partition "Phase 1: Log Collection Infrastructure" #LIGHTBLUE {
+  fork
+    :Container Log Collector 1<color:RUSTTAG>;
+  fork again
+    :Container Log Collector 2<color:RUSTTAG>;
+  fork again
+    :Container Log Collector 3<color:RUSTTAG>;
+  end fork
+
+:Container Log Load Balancer<color:NGINXTAG>;
+}
+
+
+
+partition "Phase 2: Elasticsearch Infrastructure" #LIGHTYELLOW {
+  :Elasticsetup<color:SETUPTAG>;
+
+  fork
+    :Es01<color:ELASTICTAG>;
+  fork again
+    :Es02<color:ELASTICTAG>;
+  fork again
+    :Es03<color:ELASTICTAG>;
+  fork again
+    :Es04<color:ELASTICTAG>;
+  fork again
+    :Es05<color:ELASTICTAG>;
+  end fork
+ :Elastic Load Balancer<color:HAPROXYTAG>;
+}
+fork
+    partition "Phase 3: API Services" #LIGHTCORAL {
+        :Log Forwarding Api 1<color:RUSTTAG>;
+    fork
+      :Log Forwarding Api 2<color:RUSTTAG>;
+    fork again
+      :Log Forwarding Api 3<color:RUSTTAG>;
+    end fork
+      :log-forwarding-lb<color:NGINXTAG>;
+    }
+fork again
+    partition "Phase 3 Elastic Stack Components" #LIGHTGREEN {
+    fork
+        :Kibana <color:RUSTTAG>;
+    fork again
+        :Metricbeat <color:RUSTTAG>;
+    end fork
+        }
+    stop
+end fork
+    
+
+end fork
+
+:Log Sender<color:RUSTTAG>;
+
+:System Ready;
+stop
+@enduml
