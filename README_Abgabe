@@ -1,0 +1,26 @@
+# RustLogger
+## Quick Start
+Das Projekt nutzt Rust, entsprechend einen Compiler installieren wenn nötig / noch nicht passiert (z.B. für das nachfolgende TUI wichtig)
+### Start RustLogger mit Docker
+Wir haben das von uns veröffentlichte .env.example kopiert und soweit ausgefüllt, dass sie lediglich die folgenden Befehle ausführen müssen um das Projekt zu starten (sehen sie das bitte entsprechend nicht die Secrets im .env, wie den KIBANA_ENCRYPTION_KEY, etc. als "sicher" an, dass von uns veröffentlichte Template wurde nur mit dem nötigsten für eine lokale Ausführung befüllt.)
+
+```bash
+cd docker-compose
+docker compose up -d
+```
+Das kann beim ersten Start einige Zeit dauern (im Minutenbereich), das liegt an mehreren Gründen:
+1. Dependencies müssen kompiliert werden (alles in Rust geschrieben)
+2. Verschlüsselung / Organisation von Elastic Search Cluster dauert einige Zeit
+3. Bedingt durch Punkt 2 benötigen Health Checks einige Zeit bis andere Container gestartet werden können vergeht also einige Zeit DENN Wir möchten damit garantieren, dass innerhalb der Simulation keine Fehlerlogs in Elastic Search gelangen
+
+**Hinweis:** Innerhalb der Dockerfile wird die EOF Syntax verwendet (entnommen aus ihrem Beispiel Repo), diese funktioniert unter Windows und älteren Linux Distributionen nicht. Podman ist ebenfalls nicht empfehlenswert, aber vlt. haben Sie damit mehr Glück als wir blutige Anfänger ;)
+
+### Abfrage bestehender Logs
+Sobald das Projekt gestartet ist können Sie wohlbekannt unter Kibana die antreffenden Logs durchsuchen, sowie den Status des E(L)K-Stacks (wir nutzen ja kein Logstash) mittels Metricbeat abrufen. Die Standardmäßigen Indizes hierfür sind: log-test (für die Arduino Dummy Logs), sowie container-logs
+
+Alternativ haben sie die Möglichkeit ein von uns entwickeltes TUI zu verwenden:
+```bash
+cd log-tui
+cargo build --release
+cargo run
+```
