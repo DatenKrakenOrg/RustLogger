@@ -1,0 +1,18 @@
+{
+  "members": [
+    "Manuel Schülein",
+    "Paul Schröppel",
+    "René Stephan"
+  ],
+  "title": "RustLogger",
+  "description": "Simulation einer Logging Pipeline geschrieben in Rust und unter primärer Verwendung von Elasticsearch, Kibana, Actix, Polars",
+  "features": [
+    "Parametrisierter Log Generator zur Generierung einer CSV Datei bestehend aus Logs, welche eine Messdatensammlung (Temp, Humidity, etc.) mittels unterschiedlicher Arduinos abbildet.",
+    "Log Sender zum Senden von Logs an eine API zur Speicherung in Elastic Search",
+    "Persistenz der Logs (von Log Generator wie auch Containern) innerhalb von Elasticsearch",
+    "Anzeige von Logs, sowie Status des ELK Stacks (mittels Metricbeat) in Kibana",
+    "Ausfallsicherheit / Authentifizierung durch Load Balancer",
+    "Ausfallsicherheit der Datenhaltungsschicht durch Elasticsearch Clusterbetrieb",
+    "LogTUI zum Abrufen / Filtern von Logs aus Elasticsearch ohne Kibana"
+  ]
+}
